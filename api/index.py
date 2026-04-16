@@ -1,18 +1,16 @@
-from flask import Flask, render_template, jsonify, request
+import os
 import sqlite3
 import json
 import requests
-
-import os
 from flask import Flask, render_template, jsonify, request
 
-# This finds the actual folder where app.py lives
-base_dir = os.path.abspath(os.path.dirname(__file__))
-
-project_root = os.path.abspath(os.path.join(api_dir, ".."))
+# This finds the directory of index.py (the /api folder)
+api_dir = os.path.dirname(os.path.abspath(__file__))
+# This points to the project root
+project_root = os.path.dirname(api_dir)
 
 app = Flask(__name__, 
-            template_folder=os.path.join(project_root, 'templates'),
+            template_folder=os.path.join(project_root, 'templates'), 
             static_folder=os.path.join(project_root, 'static'))
 
 def get_db_connection():
