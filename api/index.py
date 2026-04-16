@@ -9,9 +9,7 @@ from flask import Flask, render_template, jsonify, request
 # This finds the actual folder where app.py lives
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
-app = Flask(__name__,
-            template_folder=os.path.join(base_dir, 'templates'),
-            static_folder=os.path.join(base_dir, 'static'))
+app = Flask(__name__, template_folder="../templates", static_folder="../static")
 
 # --- PASTE YOUR API KEY HERE ---
 YOUTUBE_API_KEY = "AIzaSyCm6N6r9KxIGvtBA0bTmZVMlWodEumD5lY"
