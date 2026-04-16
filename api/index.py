@@ -4,18 +4,19 @@ import json
 import requests
 from flask import Flask, render_template, jsonify, request
 
-# This finds the directory of index.py (the /api folder)
-api_dir = os.path.dirname(os.path.abspath(__file__))
-# This points to the project root
-project_root = os.path.dirname(api_dir)
-
 app = Flask(__name__, 
-            template_folder=os.path.join(project_root, 'templates'), 
-            static_folder=os.path.join(project_root, 'static'))
+            template_folder="../templates", 
+            static_folder="../static")
 
 def get_db_connection():
-    # Look for the DB in the project root, not the api folder
-    db_path = os.path.join(project_root, 'karaoke.db')
+    # Use an absolute path so Vercel doesn't get lost
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    db_path = os.path.join(base_dir, 'karaoke.db')
+    
+    # This check helps us see the error in the logs if the file is missing
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found at {db_path}")
+        
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
