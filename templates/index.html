@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karaoke ni GM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="root">
+        <div class="scanlines" aria-hidden="true"></div>
+
+        <header class="header">
+            <div class="logo-mark">
+                <span class="logo-k">KAREOKE NI GM</span>
+            </div>
+            <div class="header-right">
+                <div id="sing-pill" class="sing-pill silent">
+                    <div id="sing-dot" class="sing-dot"></div>
+                    <span id="sing-label" class="sing-label">SILENT</span>
+                </div>
+                <div class="mic-status">
+                    <div id="mic-dot" class="mic-dot"></div>
+                    <span id="mic-label" class="mic-label">NO MIC</span>
+                </div>
+            </div>
+        </header>
+
+        <div id="player-frame" class="player-frame">
+
+            <div id="player-loader" class="player-loader">
+                <div class="loader-text">READY</div>
+                <div class="loader-dots">
+                    <div class="loader-dot" style="animation-delay: 0s"></div>
+                    <div class="loader-dot" style="animation-delay: 0.2s"></div>
+                    <div class="loader-dot" style="animation-delay: 0.4s"></div>
+                </div>
+            </div>
+
+            <img id="player-standby-img" src="{{ url_for('static', filename='standby.png') }}" alt="Karaoke Standby" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1;">
+
+            <div id="yt-player-container"></div>
+        </div>
+
+        <div class="timeline">
+            <div id="timeline-progress" class="timeline-progress"></div>
+            <div id="beat-zones-container"></div>
+        </div>
+
+        <div class="score-section">
+            <div class="score-card">
+                <div class="score-label">SCORE</div>
+                <div id="score-value" class="score-value">000000</div>
+                <div id="score-hint" class="score-hint">Enable mic to start scoring</div>
+            </div>
+        </div>
+
+        <div class="vu-section">
+            <div class="vu-label">MIC INPUT</div>
+            <div id="vu-meter" class="vu-meter">
+                </div>
+        </div>
+
+        <div class="controls">
+    <select id="song-select" class="btn" style="display: none;">
+        <option value="">Select a song...</option>
+    </select>
+
+    <button id="mic-btn" class="btn btn-start">ENABLE MIC</button>
+            <button id="next-btn" class="btn btn-reset" style="border-color: #4169E1; color: #4169E1;">NEXT SONG</button>
+            <button id="reset-btn" class="btn btn-reset">RESET</button>
+</div>
+
+        <div id="error-msg" class="error-msg" style="display: none;"></div>
+
+        <div class="search-queue-section" style="width: 100%; max-width: 720px; margin-top: 20px; display: flex; gap: 20px; z-index: 1;">
+
+            <div class="search-panel" style="flex: 1; background: #0f0f0f; padding: 15px; border-radius: 6px; border: 1px solid #1e1e1e;">
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                    <input type="text" id="search-input" placeholder="Search YouTube..." style="flex: 1; padding: 8px; background: #1a1a1a; border: 1px solid #333; color: #fff; font-family: 'Outfit', sans-serif; border-radius: 3px;">
+                    <button id="search-btn" class="btn btn-start" style="padding: 8px 16px;">SEARCH</button>
+                </div>
+                <div id="search-results" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+                    </div>
+            </div>
+
+            <div class="queue-panel" style="flex: 1; background: #0f0f0f; padding: 15px; border-radius: 6px; border: 1px solid #1e1e1e;">
+                <h3 style="font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.2em; color: #00e5b0; margin-bottom: 12px;">UP NEXT</h3>
+                <div id="queue-list" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="font-size: 12px; color: #555;">Queue is empty</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rhythm-legend">
+            <div class="legend-title">SINGING WINDOWS</div>
+            <div id="legend-grid" class="legend-grid">
+                </div>
+        </div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
