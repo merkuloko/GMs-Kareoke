@@ -17,9 +17,10 @@ def get_db_connection():
     db_path = os.path.join(base_dir, 'kareoke.db')
     
     # This check helps us see the error in the logs if the file is missing
-if not os.path.exists(db_path):
-    return None
-        
+def get_db_connection():
+    db_path = os.path.join(base_dir, 'karaoke.db')
+    if not os.path.exists(db_path):
+        return None
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
