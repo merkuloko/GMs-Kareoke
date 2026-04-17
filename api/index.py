@@ -26,9 +26,6 @@ def get_db_connection():
 # --- PASTE YOUR API KEY HERE ---
 YOUTUBE_API_KEY = "AIzaSyCm6N6r9KxIGvtBA0bTmZVMlWodEumD5lY"
 
-    conn.row_factory = sqlite3.Row
-    return conn
-
 @app.route('/')
 def home():
     return render_template('index.html')
