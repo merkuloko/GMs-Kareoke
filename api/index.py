@@ -14,7 +14,7 @@ app = Flask(
 def get_db_connection():
     # Use an absolute path so Vercel doesn't get lost
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(base_dir, 'karaoke.db')
+    db_path = os.path.join(base_dir, 'kareoke.db')
     
     # This check helps us see the error in the logs if the file is missing
     if not os.path.exists(db_path):
@@ -26,8 +26,6 @@ def get_db_connection():
 # --- PASTE YOUR API KEY HERE ---
 YOUTUBE_API_KEY = "AIzaSyCm6N6r9KxIGvtBA0bTmZVMlWodEumD5lY"
 
-def get_db_connection():
-    conn = sqlite3.connect('../karaoke.db')
     conn.row_factory = sqlite3.Row
     return conn
 
