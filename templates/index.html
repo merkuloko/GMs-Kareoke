@@ -8,6 +8,21 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+
+    <div id="instruction-modal" class="modal">
+        <div class="modal-content">
+            <span id="close-modal" class="close-btn">&times;</span>
+            <h3 style="color: #00e5b0; margin-bottom: 12px; font-family: 'Space Mono', monospace;">HOW TO PLAY</h3>
+            <ol style="padding-left: 20px; color: #ccc; margin-bottom: 16px;">
+                <li style="margin-bottom: 8px;">Click <b>ENABLE MIC</b> and allow browser permissions.</li>
+                <li style="margin-bottom: 8px;">Use the Search bar to find a karaoke track on YouTube.</li>
+                <li style="margin-bottom: 8px;">Click a result to add it to the <b>UP NEXT</b> queue.</li>
+                <li style="margin-bottom: 8px;">Sing along! Points are awarded for singing during the track.</li>
+                <li>When the song ends, enter your name to save your score to the Leaderboard!</li>
+            </ol>
+        </div>
+    </div>
+
     <div class="root">
         <div class="scanlines" aria-hidden="true"></div>
 
@@ -15,7 +30,9 @@
             <div class="logo-mark">
                 <span class="logo-k">KAREOKE NI GM</span>
             </div>
+
             <div class="header-right">
+                <button id="info-btn" class="info-btn">i</button>
                 <div id="sing-pill" class="sing-pill silent">
                     <div id="sing-dot" class="sing-dot"></div>
                     <span id="sing-label" class="sing-label">SILENT</span>
@@ -28,7 +45,6 @@
         </header>
 
         <div id="player-frame" class="player-frame">
-
             <div id="player-loader" class="player-loader">
                 <div class="loader-text">READY</div>
                 <div class="loader-dots">
@@ -58,45 +74,59 @@
 
         <div class="vu-section">
             <div class="vu-label">MIC INPUT</div>
-            <div id="vu-meter" class="vu-meter">
-                </div>
+            <div id="vu-meter" class="vu-meter"></div>
         </div>
 
         <div class="controls">
-    <select id="song-select" class="btn" style="display: none;">
-        <option value="">Select a song...</option>
-    </select>
+            <select id="song-select" class="btn" style="display: none;">
+                <option value="">Select a song...</option>
+            </select>
 
-    <button id="mic-btn" class="btn btn-start">ENABLE MIC</button>
+            <button id="mic-btn" class="btn btn-start">ENABLE MIC</button>
             <button id="next-btn" class="btn btn-reset" style="border-color: #4169E1; color: #4169E1;">NEXT SONG</button>
             <button id="reset-btn" class="btn btn-reset">RESET</button>
-</div>
+        </div>
 
         <div id="error-msg" class="error-msg" style="display: none;"></div>
 
-        <div class="search-queue-section" style="width: 100%; max-width: 720px; margin-top: 20px; display: flex; gap: 20px; z-index: 1;">
+        <div style="width: 100%; max-width: 900px; margin-top: 20px; display: flex; gap: 15px; z-index: 1; flex-wrap: wrap; justify-content: center;">
 
-            <div class="search-panel" style="flex: 1; background: #0f0f0f; padding: 15px; border-radius: 6px; border: 1px solid #1e1e1e;">
+            <div class="search-panel" style="flex: 1; min-width: 250px; background: #0f0f0f; padding: 15px; border-radius: 6px; border: 1px solid #1e1e1e;">
                 <div style="display: flex; gap: 8px; margin-bottom: 12px;">
                     <input type="text" id="search-input" placeholder="Search YouTube..." style="flex: 1; padding: 8px; background: #1a1a1a; border: 1px solid #333; color: #fff; font-family: 'Outfit', sans-serif; border-radius: 3px;">
                     <button id="search-btn" class="btn btn-start" style="padding: 8px 16px;">SEARCH</button>
                 </div>
-                <div id="search-results" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
-                    </div>
+                <div id="search-results" style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto;"></div>
             </div>
 
-            <div class="queue-panel" style="flex: 1; background: #0f0f0f; padding: 15px; border-radius: 6px; border: 1px solid #1e1e1e;">
+            <div class="queue-panel" style="flex: 1; min-width: 200px; background: #0f0f0f; padding: 15px; border-radius: 6px; border: 1px solid #1e1e1e;">
                 <h3 style="font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.2em; color: #00e5b0; margin-bottom: 12px;">UP NEXT</h3>
                 <div id="queue-list" style="display: flex; flex-direction: column; gap: 8px;">
                     <div style="font-size: 12px; color: #555;">Queue is empty</div>
                 </div>
             </div>
+
+            <div class="rank-panel" style="flex: 1; min-width: 200px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3 style="font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 0.2em; color: #f5c842;">LEADERBOARD</h3>
+                    <button id="reset-rank-btn" style="background: none; border: 1px solid #333; color: #888; font-size: 9px; cursor: pointer; padding: 2px 6px; border-radius: 3px;">CLEAR</button>
+                </div>
+                <div id="rank-list" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="font-size: 12px; color: #555;">No scores yet</div>
+                </div>
+            </div>
+
+            <div class="qr-panel">
+                <h3 style="font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #fff; margin-bottom: 10px;">ADD A SONG</h3>
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=Coming+Soon+Via+Supabase&bgcolor=0f0f0f&color=00e5b0" alt="QR Code" style="width: 90px; height: 90px; margin-bottom: 10px; border-radius: 4px;">
+                <p style="font-size: 9px; color: #888; line-height: 1.3;">Scan to open Mobile Queue (Coming Soon)</p>
+            </div>
+
         </div>
 
         <div class="rhythm-legend">
             <div class="legend-title">SINGING WINDOWS</div>
-            <div id="legend-grid" class="legend-grid">
-                </div>
+            <div id="legend-grid" class="legend-grid"></div>
         </div>
     </div>
 

@@ -5,6 +5,7 @@ const SCORE_INCREMENT = 1;
 let currentVideoId = 'BhSZGUXeY6Q'; // Starting video
 let currentRhythmMap = [];
 let songQueue = []; // Holds the "Up Next" songs
+let leaderboardData = [];
 
 let player, audioCtx, analyser, dataArray, stream, rafId;
 let isPlaying = false;
@@ -36,7 +37,12 @@ const els = {
   searchInput: document.getElementById('search-input'),
   searchBtn: document.getElementById('search-btn'),
   searchResults: document.getElementById('search-results'),
-  queueList: document.getElementById('queue-list')
+  queueList: document.getElementById('queue-list'),
+  infoBtn: document.getElementById('info-btn'),
+  modal: document.getElementById('instruction-modal'),
+  closeModalBtn: document.getElementById('close-modal'),
+  rankList: document.getElementById('rank-list'),
+  resetRankBtn: document.getElementById('reset-rank-btn')
 };
 
 // ─── Menu & Database Logic ──────────────────────────────
@@ -168,22 +174,34 @@ window.onYouTubeIframeAPIReady = function() {
       onStateChange: (e) => {
         isPlaying = (e.data === YT.PlayerState.PLAYING);
         if (isPlaying) {
-          // <-- THIS IS THE CRITICAL ADDITION -->
-          // Hide both the READY text and the standby image when a video starts!
           els.loader.style.display = 'none';
           els.standbyImg.style.display = 'none';
-
           duration = e.target.getDuration();
           if (micActive) startLoop();
         } else {
           cancelAnimationFrame(rafId);
         }
-        if (e.data === YT.PlayerState.ENDED) playNextInQueue();
+
+        // --- NEW END OF SONG LOGIC ---
+        if (e.data === YT.PlayerState.ENDED) {
+            if (score > 0) {
+                // Ask for their name, default to "Anonymous Singer" if blank
+                let singerName = prompt(`Great job! Your score was ${score}.\nEnter your name for the leaderboard:`) || "Anonymous Singer";
+
+                // Add to array and update UI
+                leaderboardData.push({ name: singerName.substring(0, 15), score: score });
+                updateLeaderboardUI();
+
+                // Auto-reset score for next singer
+                score = 0;
+                els.scoreValue.innerText = "000000";
+            }
+            // Move to next song
+            playNextInQueue();
+        }
+
         updateHint();
       }
-    }
-  });
-}
 
 function buildTimelineZones() {
   if (!duration) return;
@@ -313,6 +331,44 @@ els.nextBtn.addEventListener('click', () => {
         els.standbyImg.style.display = 'block';
         els.scoreHint.innerText = "Queue is empty! Search for a song.";
     }
+});
+
+// --- Modal Logic ---
+els.infoBtn.addEventListener('click', () => els.modal.style.display = 'flex');
+els.closeModalBtn.addEventListener('click', () => els.modal.style.display = 'none');
+window.addEventListener('click', (e) => {
+    if (e.target === els.modal) els.modal.style.display = 'none';
+});
+
+// --- Leaderboard Logic ---
+function updateLeaderboardUI() {
+    els.rankList.innerHTML = '';
+    if (leaderboardData.length === 0) {
+        els.rankList.innerHTML = '<div style="font-size: 12px; color: #555;">No scores yet</div>';
+        return;
+    }
+
+    // Sort scores highest to lowest
+    leaderboardData.sort((a, b) => b.score - a.score);
+
+    // Display top 5
+    leaderboardData.slice(0, 5).forEach((entry, i) => {
+        const div = document.createElement('div');
+        div.style = "display: flex; justify-content: space-between; font-size: 11px; padding: 5px; background: #1a1a1a; border-radius: 3px; color: #eee;";
+
+        let rankColor = i === 0 ? '#f5c842' : (i === 1 ? '#c0c0c0' : (i === 2 ? '#cd7f32' : '#888'));
+
+        div.innerHTML = `
+            <span><strong style="color: ${rankColor}; margin-right: 6px;">#${i+1}</strong> ${entry.name}</span>
+            <span style="font-family: 'Space Mono', monospace; color: #00e5b0;">${entry.score.toLocaleString("en-US", { minimumIntegerDigits: 6, useGrouping: false })}</span>
+        `;
+        els.rankList.appendChild(div);
+    });
+}
+
+els.resetRankBtn.addEventListener('click', () => {
+    leaderboardData = [];
+    updateLeaderboardUI();
 });
 
 initUI();
