@@ -3,7 +3,7 @@ import json
 
 def init_db():
     # 1. Connect to the database (this creates the file if it doesn't exist)
-    conn = sqlite3.connect('karaoke.db')
+    conn = sqlite3.connect('kareoke.db')
     cursor = conn.cursor()
 
     # 2. Create the songs table
