@@ -34,8 +34,13 @@ def home():
 @app.route('/api/songs')
 def get_songs():
     conn = get_db_connection()
+    
+    if conn is None:
+        return jsonify([])  # prevent crash if DB missing
+
     songs = conn.execute('SELECT id, title, artist FROM songs').fetchall()
     conn.close()
+    
     return jsonify([dict(row) for row in songs])
 
 @app.route('/api/songs/<int:song_id>')
