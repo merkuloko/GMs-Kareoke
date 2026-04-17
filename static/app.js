@@ -38,6 +38,8 @@ const els = {
   searchBtn: document.getElementById('search-btn'),
   searchResults: document.getElementById('search-results'),
   queueList: document.getElementById('queue-list'),
+
+  // --- NEW ELEMENTS FOR MODAL & LEADERBOARD ---
   infoBtn: document.getElementById('info-btn'),
   modal: document.getElementById('instruction-modal'),
   closeModalBtn: document.getElementById('close-modal'),
@@ -65,7 +67,6 @@ els.songSelect.addEventListener('change', async (e) => {
     const response = await fetch(`/api/songs/${songId}`);
     const songData = await response.json();
 
-    // Play immediately and clear queue
     songQueue = [];
     updateQueueUI();
     currentVideoId = songData.youtube_id;
@@ -94,7 +95,6 @@ els.searchBtn.addEventListener('click', async () => {
                 <img src="${video.thumbnail}" style="width: 50px; border-radius: 3px;">
                 <div style="font-size: 11px; color: #fff;">${video.title}</div>
             `;
-            // This adds the song to the array
             div.onclick = () => {
                 addToQueue({ id: video.id, title: video.title, rhythm_map: [] });
                 els.searchResults.innerHTML = '';
@@ -109,7 +109,6 @@ function addToQueue(song) {
     songQueue.push(song);
     updateQueueUI();
 
-    // Check if the player is currently "Unstarted" (-1), "Ended" (0), or "Cued" (5)
     const state = player.getPlayerState();
     if (state === -1 || state === 0 || state === 5) {
         playNextInQueue();
@@ -122,7 +121,6 @@ function playNextInQueue() {
     const nextSong = songQueue.shift();
     currentVideoId = nextSong.id;
 
-    // This command forces the player to switch to the new ID immediately
     if (player && player.loadVideoById) {
         player.loadVideoById({
             videoId: currentVideoId,
@@ -161,13 +159,10 @@ function initUI() {
 
 window.onYouTubeIframeAPIReady = function() {
   player = new YT.Player('yt-player-container', {
-    videoId: '', // <--- Set this to an empty string to start clean!
+    videoId: '',
     playerVars: { autoplay: 0, controls: 1, rel: 0, modestbranding: 1 },
     events: {
       onReady: (e) => {
-        // --- COMMENT OUT OR DELETE THIS LINE ---
-        // els.loader.style.display = 'none'; // We keep the loader text showing READY
-
         duration = e.target.getDuration();
         buildTimelineZones();
       },
@@ -182,26 +177,22 @@ window.onYouTubeIframeAPIReady = function() {
           cancelAnimationFrame(rafId);
         }
 
-        // --- NEW END OF SONG LOGIC ---
         if (e.data === YT.PlayerState.ENDED) {
             if (score > 0) {
-                // Ask for their name, default to "Anonymous Singer" if blank
                 let singerName = prompt(`Great job! Your score was ${score}.\nEnter your name for the leaderboard:`) || "Anonymous Singer";
-
-                // Add to array and update UI
                 leaderboardData.push({ name: singerName.substring(0, 15), score: score });
                 updateLeaderboardUI();
-
-                // Auto-reset score for next singer
                 score = 0;
                 els.scoreValue.innerText = "000000";
             }
-            // Move to next song
             playNextInQueue();
         }
 
         updateHint();
       }
+    } // <-- THESE WERE THE MISSING BRACKETS!
+  });
+}
 
 function buildTimelineZones() {
   if (!duration) return;
@@ -312,20 +303,14 @@ els.resetBtn.addEventListener('click', () => {
   els.scoreValue.innerText = "000000";
 });
 
-// This listener tells the app what to do when "NEXT SONG" is clicked
 els.nextBtn.addEventListener('click', () => {
-    // 1. Stop the current scoring loop
     cancelAnimationFrame(rafId);
-
-    // 2. Clear the timeline and singing windows
     els.beatZonesContainer.innerHTML = '';
     els.timelineProgress.style.width = '0%';
 
-    // 3. Check if there is anything in the queue
     if (songQueue.length > 0) {
         playNextInQueue();
     } else {
-        // If the queue is empty, go back to your standby screen
         player.stopVideo();
         els.loader.style.display = 'flex';
         els.standbyImg.style.display = 'block';
@@ -348,16 +333,12 @@ function updateLeaderboardUI() {
         return;
     }
 
-    // Sort scores highest to lowest
     leaderboardData.sort((a, b) => b.score - a.score);
 
-    // Display top 5
     leaderboardData.slice(0, 5).forEach((entry, i) => {
         const div = document.createElement('div');
         div.style = "display: flex; justify-content: space-between; font-size: 11px; padding: 5px; background: #1a1a1a; border-radius: 3px; color: #eee;";
-
         let rankColor = i === 0 ? '#f5c842' : (i === 1 ? '#c0c0c0' : (i === 2 ? '#cd7f32' : '#888'));
-
         div.innerHTML = `
             <span><strong style="color: ${rankColor}; margin-right: 6px;">#${i+1}</strong> ${entry.name}</span>
             <span style="font-family: 'Space Mono', monospace; color: #00e5b0;">${entry.score.toLocaleString("en-US", { minimumIntegerDigits: 6, useGrouping: false })}</span>
