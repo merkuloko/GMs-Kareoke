@@ -15,6 +15,7 @@ def get_db_connection():
     # Use an absolute path so Vercel doesn't get lost
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     db_path = os.path.join(base_dir, 'kareoke.db')
+
     
     # This check helps us see the error in the logs if the file is missing
 def get_db_connection():
