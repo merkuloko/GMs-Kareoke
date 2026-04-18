@@ -47,6 +47,30 @@ const els = {
   resetRankBtn: document.getElementById('reset-rank-btn')
 };
 
+// ─── Local Storage (Save State) ─────────────────────────
+
+function saveState() {
+    localStorage.setItem('karaoke_score', score);
+    localStorage.setItem('karaoke_queue', JSON.stringify(songQueue));
+    localStorage.setItem('karaoke_leaderboard', JSON.stringify(leaderboardData));
+}
+
+function loadState() {
+    const savedScore = localStorage.getItem('karaoke_score');
+    const savedQueue = localStorage.getItem('karaoke_queue');
+    const savedLeaderboard = localStorage.getItem('karaoke_leaderboard');
+
+    // If saved data exists, load it into our variables
+    if (savedScore) score = parseInt(savedScore);
+    if (savedQueue) songQueue = JSON.parse(savedQueue);
+    if (savedLeaderboard) leaderboardData = JSON.parse(savedLeaderboard);
+
+    // Update the screen with the loaded data
+    els.scoreValue.innerText = score.toLocaleString("en-US", { minimumIntegerDigits: 6, useGrouping: false });
+    updateQueueUI();
+    updateLeaderboardUI();
+}
+
 // ─── Menu & Database Logic ──────────────────────────────
 async function loadSongMenu() {
     try {
@@ -113,6 +137,7 @@ function addToQueue(song) {
     if (state === -1 || state === 0 || state === 5) {
         playNextInQueue();
     }
+    saveState();
 }
 
 function playNextInQueue() {
@@ -128,6 +153,7 @@ function playNextInQueue() {
         });
     }
     updateQueueUI();
+    saveState();
 }
 
 function updateQueueUI() {
@@ -184,6 +210,7 @@ window.onYouTubeIframeAPIReady = function() {
                 updateLeaderboardUI();
                 score = 0;
                 els.scoreValue.innerText = "000000";
+                saveState();
             }
             playNextInQueue();
         }
@@ -239,6 +266,7 @@ function startLoop() {
     if (onBeat && isSinging) {
       score += SCORE_INCREMENT;
       els.scoreValue.innerText = score.toLocaleString("en-US", { minimumIntegerDigits: 6, useGrouping: false });
+      saveState();
     }
     updateVUUI(rms);
     updateSingingUI();
@@ -350,7 +378,9 @@ function updateLeaderboardUI() {
 els.resetRankBtn.addEventListener('click', () => {
     leaderboardData = [];
     updateLeaderboardUI();
+    saveState();
 });
 
+loadState();
 initUI();
 loadSongMenu();
