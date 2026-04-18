@@ -244,6 +244,7 @@ function getRMS(data) {
   return Math.sqrt(sum / data.length);
 }
 
+
 function startLoop() {
   cancelAnimationFrame(rafId);
   function loop() {
