@@ -23,83 +23,87 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-    let _supabase;
+        let _supabase;
 
-    async function initMobile() {
-    try {
-        const configUrl = window.location.origin + '/api/config';
-        const config = await fetch(configUrl).then(res => res.json());
-        _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
-        console.log("Mobile initialized securely");
-    } catch (e) {
-        console.error("Config fetch failed:", e);
-    }
-}
+        async function initMobile() {
+            try {
+                // Using relative path is faster and safer
+                const config = await fetch('/api/config').then(res => res.json());
+                _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
+                console.log("Mobile initialized");
+            } catch (e) {
+                console.error("Config fetch failed:", e);
+            }
+        }
 
-    initMobile();
+        initMobile();
 
-    async function searchSongs() {
-    const query = document.getElementById('songQuery').value;
-    const resultsDiv = document.getElementById('results');
-    if(!query) return;
+        async function searchSongs() {
+            const query = document.getElementById('songQuery').value.trim();
+            const resultsDiv = document.getElementById('results');
+            if (!query) return;
 
-    resultsDiv.innerHTML = '<div style="color:#555">Searching...</div>';
+            // Immediate feedback helps with perceived speed
+            resultsDiv.innerHTML = '<div style="color:#4169E1">Connecting to YouTube... 🎤</div>';
 
-    try {
-        // This ensures it uses the SAME domain and HTTPS as the page you are on
-        const apiUrl = window.location.origin + `/api/search?q=${encodeURIComponent(query)}`;
-        console.log("Fetching from:", apiUrl);
+            try {
+                const apiUrl = `/api/search?q=${encodeURIComponent(query)}`;
+                const response = await fetch(apiUrl);
 
-        const response = await fetch(apiUrl);
-        if (!response.ok) throw new Error('Network response was not ok');
+                if (!response.ok) throw new Error('Server busy');
 
-        const data = await response.json();
-        // ... rest of your display code
-    } catch (e) {
-        console.error("Fetch Error:", e);
-        resultsDiv.innerHTML = 'Error: ' + e.message;
-    }
-}
+                const data = await response.json();
+                resultsDiv.innerHTML = ''; // Clear loading text
 
-    async function addToQueue(videoId, title) {
-    const name = prompt("Enter your name:");
-    if (!name) return;
+                if (data.length === 0) {
+                    resultsDiv.innerHTML = '<div style="color:#888">No songs found.</div>';
+                    return;
+                }
 
-    // We use the supabase client we initialized at the top
-    const { data, error } = await _supabase
-    .from('live_queue')
-    .insert([
-    {
-    youtube_id: videoId,
-    title: title,
-    singer_name: name
-    }
-    ]);
+                // MOVED INSIDE: This is where the results actually get built
+                data.forEach(video => {
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+                    div.onclick = () => addToQueue(video.id, video.title);
 
-    if (error) {
-    console.error("Supabase Error:", error);
-    alert("Error: " + error.message); // This will tell us EXACTLY what's wrong
-    } else {
-    alert("Added to queue!");
-    document.getElementById('results').innerHTML = '';
-    document.getElementById('songQuery').value = '';
-    }
-    }
+                    const img = document.createElement('img');
+                    img.src = video.thumbnail;
 
-    data.forEach(video => {
-    const div = document.createElement('div');
-    div.className = 'result-item';
+                    const titleDiv = document.createElement('div');
+                    titleDiv.textContent = video.title; // XSS Protection
 
-    const titleDiv = document.createElement('div');
-    titleDiv.textContent = video.title;
+                    div.appendChild(img);
+                    div.appendChild(titleDiv);
+                    resultsDiv.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Search Error:", e);
+                resultsDiv.innerHTML = '<div style="color:#ff4060">Search failed. Try again.</div>';
+            }
+        }
 
-    const img = document.createElement('img');
-    img.src = video.thumbnail;
+        async function addToQueue(videoId, title) {
+            if (!_supabase) return alert("Connecting to database... try again in a second.");
 
-    div.appendChild(img);
-    div.appendChild(titleDiv);
-    resultsDiv.appendChild(div);
-    });
+            const name = prompt("Enter your name:");
+            if (!name) return;
+
+            const { error } = await _supabase
+                .from('live_queue')
+                .insert([{
+                    youtube_id: videoId,
+                    title: title,
+                    singer_name: name
+                }]);
+
+            if (error) {
+                alert("Error: " + error.message);
+            } else {
+                alert("Added to queue!");
+                document.getElementById('results').innerHTML = '';
+                document.getElementById('songQuery').value = '';
+            }
+        }
     </script>
     </body>
     </html>
