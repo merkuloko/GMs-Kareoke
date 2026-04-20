@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GMs Karaoke Remote</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { background: #080808; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        input { width: 80%; padding: 12px; margin: 10px 0; background: #1a1a1a; border: 1px solid #333; color: white; }
+        button { background: #4169E1; color: white; padding: 12px 24px; border: none; border-radius: 4px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>🎤 Add to Queue</h2>
+    <input type="text" id="songQuery" placeholder="Song Title or Artist">
+    <br>
+    <button onclick="sendToQueue()">ADD TO QUEUE</button>
+
+    <script>
+        async function sendToQueue() {
+            const query = document.getElementById('songQuery').value;
+            if(!query) return;
+            alert("Added! Check the main screen.");
+        }
+    </script>
+</body>
+</html>

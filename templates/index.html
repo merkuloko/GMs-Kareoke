@@ -7,9 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-
-
+<body data-mobile-queue-enabled="{{ 'true' if mobile_queue_enabled else 'false' }}" data-mobile-queue-url="{{ mobile_queue_url }}">
     <div id="instruction-modal" class="modal">
         <div class="modal-content">
             <span id="close-modal" class="close-btn">&times;</span>
@@ -18,8 +16,8 @@
                 <li style="margin-bottom: 8px;">Click <b>ENABLE MIC</b> and allow browser permissions.</li>
                 <li style="margin-bottom: 8px;">Use the Search bar to find a karaoke track on YouTube.</li>
                 <li style="margin-bottom: 8px;">Click a result to add it to the <b>UP NEXT</b> queue.</li>
-                <li style="margin-bottom: 8px;">Sing along! Points are awarded for singing during the track.</li>
-                <li>When the song ends, enter your name to save your score to the Leaderboard!</li>
+                <li style="margin-bottom: 8px;">Sing along. Points are awarded while your mic is active during the track.</li>
+                <li>When the song ends, enter your name to save your score to the leaderboard.</li>
             </ol>
         </div>
     </div>
@@ -46,7 +44,6 @@
         </header>
 
         <div style="width: 100%; max-width: 1600px; margin: 10px auto 0; padding: 0 20px; display: flex; justify-content: center; align-items: flex-start; gap: 40px; box-sizing: border-box; z-index: 1;">
-
             <div style="flex: 1; display: flex; justify-content: flex-end;">
                 <div class="rank-panel" style="width: 100%; max-width: 260px; background: #0f0f0f; padding: 15px; border-radius: 6px; border: 1px solid #1e1e1e;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -60,7 +57,6 @@
             </div>
 
             <div style="width: 100%; max-width: 880px; flex: none; display: flex; flex-direction: column; align-items: center;">
-
                 <div id="player-frame" class="player-frame" style="width: 100%;">
                     <div id="player-loader" class="player-loader">
                         <div class="loader-text">READY</div>
@@ -123,17 +119,21 @@
                         </div>
                     </div>
                 </div>
-
             </div>
 
             <div style="flex: 1; display: flex; justify-content: flex-start;">
                 <div class="qr-panel" style="width: 100%; max-width: 160px; background: #0f0f0f; padding: 20px 15px; border-radius: 6px; border: 1px solid #1e1e1e; display: flex; flex-direction: column; align-items: center; text-align: center;">
                     <h3 style="font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #fff; margin-bottom: 15px;">ADD A SONG</h3>
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=Coming+Soon+Via+Supabase&bgcolor=0f0f0f&color=00e5b0" alt="QR Code" style="width: 110px; height: 110px; margin-bottom: 12px; border-radius: 4px;">
-                    <p style="font-size: 9px; color: #888; line-height: 1.4;">Scan to open Mobile Queue<br><span style="color: #444;">(Coming Soon)</span></p>
+                    <img id="queue-qr-image" src="" alt="Mobile Queue QR Code" style="width: 110px; height: 110px; margin-bottom: 12px; border-radius: 4px; display: none;">
+                    <p id="queue-qr-copy" style="font-size: 9px; color: #888; line-height: 1.4;">
+                        {% if mobile_queue_enabled %}
+                        Scan to open the mobile queue
+                        {% else %}
+                        Set <span style="color: #00e5b0;">MOBILE_QUEUE_URL</span> to enable mobile queue QR
+                        {% endif %}
+                    </p>
                 </div>
             </div>
-
         </div>
     </div>
 
