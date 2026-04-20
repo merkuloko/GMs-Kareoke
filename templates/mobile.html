@@ -77,7 +77,8 @@ async function searchSongs() {
             const name = prompt("Enter your name:");
             if (!name) return;
 
-            const { data, error } = await _supabase
+            // Ensure _supabase is already initialized in initMobile()
+            const { error } = await _supabase
                 .from('live_queue')
                 .insert([{
                     youtube_id: videoId,
@@ -86,7 +87,8 @@ async function searchSongs() {
                 }]);
 
             if (error) {
-                alert("Error: " + error.message);
+                console.error("Supabase Error:", error);
+                alert("Error: " + error.message); // This will tell you if it's an RLS issue
             } else {
                 alert("Added to queue!");
                 document.getElementById('results').innerHTML = '';
