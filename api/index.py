@@ -408,6 +408,9 @@ def queue_qr():
     )
     return jsonify({"url": qr_url, "target": MOBILE_QUEUE_URL})
 
+@app.route("/mobile")
+def mobile_remote():
+    return render_template("mobile.html")
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
