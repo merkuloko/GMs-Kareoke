@@ -155,6 +155,34 @@ async function clearLeaderboard() {
   updateLeaderboardUI();
 }
 
+async function syncRemoteQueue() {
+  try {
+    const entries = await fetchJson("/api/live-queue");
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return;
+    }
+
+    for (const entry of entries) {
+      addToQueue({
+        id: entry.youtube_id,
+        title: entry.title,
+        artist: entry.singer_name ? `Requested by ${entry.singer_name}` : "",
+        rhythm_map: [],
+      });
+
+      try {
+        await fetchJson(`/api/live-queue/${entry.id}`, { method: "DELETE" });
+      } catch (error) {
+        console.error("Failed to remove processed queue entry:", error);
+      }
+    }
+  } catch (error) {
+    if (error.message !== "Supabase is not configured") {
+      console.error("Failed to sync remote queue:", error);
+    }
+  }
+}
+
 function normalizeSong(song) {
   return {
     id: song.youtube_id || song.id,
@@ -676,39 +704,6 @@ window.addEventListener("click", (event) => {
 els.resetRankBtn.addEventListener("click", () => {
   void clearLeaderboard();
 });
-
-async function initRealtimeQueue() {
-    try {
-        const config = await fetch('/api/config').then(res => res.json());
-
-        if (!config.supabase_url || !config.supabase_key) {
-            console.warn("Supabase credentials missing from config.");
-            return;
-        }
-
-        const _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
-
-        _supabase
-            .channel('public:live_queue')
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'live_queue'
-            }, payload => {
-                addToQueue({
-                    id: payload.new.youtube_id,
-                    title: `${payload.new.title} (Requested by: ${payload.new.singer_name})`,
-                    rhythm_map: []
-                });
-            })
-            .subscribe();
-
-        console.log("Secure Realtime Bridge Active.");
-    } catch (err) {
-        console.error("Failed to initialize secure bridge:", err);
-    }
-}
-initRealtimeQueue();
 loadState();
 initUI();
 updateRhythmUI();
@@ -716,3 +711,5 @@ updateHint();
 loadSongMenu();
 loadLeaderboard();
 loadQueueQr();
+syncRemoteQueue();
+window.setInterval(syncRemoteQueue, 5000);

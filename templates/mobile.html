@@ -21,22 +21,14 @@
     </div>
     <div id="results"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        let _supabase;
-
-        async function initMobile() {
-            try {
-                // Using relative path is faster and safer
-                const config = await fetch('/api/config').then(res => res.json());
-                _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
-                console.log("Mobile initialized");
-            } catch (e) {
-                console.error("Config fetch failed:", e);
+        function getFriendlyError(error) {
+            if (error instanceof TypeError) {
+                return "Cannot reach the karaoke server. If you used a localhost QR code, replace it with your computer's LAN IP.";
             }
-        }
 
-        initMobile();
+            return error.message || "Request failed";
+        }
 
         async function searchSongs() {
             const query = document.getElementById('songQuery').value.trim();
@@ -50,7 +42,10 @@
                 const apiUrl = `/api/search?q=${encodeURIComponent(query)}`;
                 const response = await fetch(apiUrl);
 
-                if (!response.ok) throw new Error('Server busy');
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.error || 'Server busy');
+                }
 
                 const data = await response.json();
                 resultsDiv.innerHTML = ''; // Clear loading text
@@ -78,30 +73,35 @@
                 });
             } catch (e) {
                 console.error("Search Error:", e);
-                resultsDiv.innerHTML = '<div style="color:#ff4060">Search failed. Try again.</div>';
+                resultsDiv.innerHTML = `<div style="color:#ff4060">${getFriendlyError(e)}</div>`;
             }
         }
 
         async function addToQueue(videoId, title) {
-            if (!_supabase) return alert("Connecting to database... try again in a second.");
-
             const name = prompt("Enter your name:");
             if (!name) return;
 
-            const { error } = await _supabase
-                .from('live_queue')
-                .insert([{
-                    youtube_id: videoId,
-                    title: title,
-                    singer_name: name
-                }]);
+            try {
+                const response = await fetch('/api/live-queue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        youtube_id: videoId,
+                        title: title,
+                        singer_name: name.trim()
+                    })
+                });
 
-            if (error) {
-                alert("Error: " + error.message);
-            } else {
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to add to queue');
+                }
+
                 alert("Added to queue!");
                 document.getElementById('results').innerHTML = '';
                 document.getElementById('songQuery').value = '';
+            } catch (error) {
+                alert("Error: " + getFriendlyError(error));
             }
         }
     </script>

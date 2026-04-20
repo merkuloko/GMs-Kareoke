@@ -27,6 +27,7 @@ SUPABASE_TABLE = os.environ.get("SUPABASE_SONGS_TABLE", "songs")
 SUPABASE_LEADERBOARD_TABLE = os.environ.get(
     "SUPABASE_LEADERBOARD_TABLE", "leaderboard_entries"
 )
+SUPABASE_QUEUE_TABLE = os.environ.get("SUPABASE_QUEUE_TABLE", "live_queue")
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()
 MOBILE_QUEUE_URL = os.environ.get("MOBILE_QUEUE_URL", "").strip()
 
@@ -242,6 +243,58 @@ def clear_leaderboard():
     )
 
 
+def fetch_live_queue():
+    if not is_supabase_enabled():
+        return []
+
+    return supabase_request(
+        "GET",
+        SUPABASE_QUEUE_TABLE,
+        "select=id,youtube_id,title,singer_name,created_at&order=created_at.asc,id.asc",
+    ) or []
+
+
+def create_queue_entry(payload):
+    if not is_supabase_enabled():
+        raise RuntimeError("Supabase is not configured")
+
+    youtube_id = (payload.get("youtube_id") or "").strip()
+    title = (payload.get("title") or "").strip()
+    singer_name = (payload.get("singer_name") or "").strip()[:30]
+
+    if not youtube_id:
+        raise ValueError("youtube_id is required")
+    if not title:
+        raise ValueError("title is required")
+    if not singer_name:
+        raise ValueError("singer_name is required")
+
+    data = supabase_request(
+        "POST",
+        SUPABASE_QUEUE_TABLE,
+        payload={
+            "youtube_id": youtube_id,
+            "title": title,
+            "singer_name": singer_name,
+        },
+        prefer="return=representation",
+    )
+
+    return data[0] if data else None
+
+
+def delete_queue_entry(entry_id):
+    if not is_supabase_enabled():
+        raise RuntimeError("Supabase is not configured")
+
+    supabase_request(
+        "DELETE",
+        SUPABASE_QUEUE_TABLE,
+        f"id=eq.{entry_id}",
+        prefer="return=minimal",
+    )
+
+
 @app.route("/")
 def home():
     return render_template(
@@ -258,16 +311,25 @@ def mobile_queue():
 
 @app.route("/api/config")
 def get_config():
-    supabase_url = os.environ.get("SUPABASE_URL", "")
-    supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY", "")
+    config_error = None
+    try:
+        supabase_enabled = is_supabase_enabled()
+        if os.environ.get("SUPABASE_URL", "").strip() and not supabase_enabled:
+            get_supabase_credentials()
+    except RuntimeError as error:
+        config_error = str(error)
+        supabase_enabled = False
 
-    return jsonify({
-        "supabase_url": supabase_url,
-        "supabase_key": supabase_anon_key,
-        "mobile_queue_url": MOBILE_QUEUE_URL,
-        "mobile_queue_enabled": bool(MOBILE_QUEUE_URL),
-        "songs_backend": "supabase" if is_supabase_enabled() else "sqlite"
-    })
+    return jsonify(
+        {
+            "mobile_queue_url": MOBILE_QUEUE_URL,
+            "mobile_queue_enabled": bool(MOBILE_QUEUE_URL),
+            "songs_backend": "supabase" if supabase_enabled else "sqlite",
+            "leaderboard_backend": "supabase" if supabase_enabled else "local",
+            "queue_backend": "supabase" if supabase_enabled else "local",
+            "supabase_error": config_error,
+        }
+    )
 
 
 @app.route("/api/songs")
@@ -356,7 +418,6 @@ def search_youtube():
     return jsonify(results)
 
 
-@app.route("/api/leaderboard", methods=["POST"])
 @app.route("/api/leaderboard", methods=["GET"])
 def get_leaderboard():
     try:
@@ -394,6 +455,43 @@ def delete_leaderboard():
     return jsonify({"status": "cleared"})
 
 
+@app.route("/api/live-queue", methods=["GET"])
+def get_live_queue():
+    try:
+        return jsonify(fetch_live_queue())
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 500
+    except requests.RequestException:
+        return jsonify({"error": "Queue service unavailable"}), 502
+
+
+@app.route("/api/live-queue", methods=["POST"])
+def add_live_queue():
+    data = request.get_json(silent=True) or {}
+    try:
+        entry = create_queue_entry(data)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 500
+    except requests.RequestException:
+        return jsonify({"error": "Queue service unavailable"}), 502
+
+    return jsonify(entry), 201
+
+
+@app.route("/api/live-queue/<int:entry_id>", methods=["DELETE"])
+def remove_live_queue(entry_id):
+    try:
+        delete_queue_entry(entry_id)
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 500
+    except requests.RequestException:
+        return jsonify({"error": "Queue service unavailable"}), 502
+
+    return jsonify({"status": "removed"})
+
+
 @app.route("/api/queue-qr")
 def queue_qr():
     if not MOBILE_QUEUE_URL:
@@ -404,10 +502,6 @@ def queue_qr():
         f"?size=110x110&data={quote_plus(MOBILE_QUEUE_URL)}&bgcolor=0f0f0f&color=00e5b0"
     )
     return jsonify({"url": qr_url, "target": MOBILE_QUEUE_URL})
-
-@app.route("/mobile")
-def mobile_remote():
-    return render_template("mobile.html")
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
