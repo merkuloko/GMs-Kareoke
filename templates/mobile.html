@@ -27,14 +27,14 @@
 
     async function initMobile() {
     try {
-    const configUrl = window.location.origin + '/api/config';
-    const config = await fetch(configUrl).then(res => res.json());
-    _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
-    console.log("Mobile initialized securely");
+        const configUrl = window.location.origin + '/api/config';
+        const config = await fetch(configUrl).then(res => res.json());
+        _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
+        console.log("Mobile initialized securely");
     } catch (e) {
-    console.error("Config fetch failed:", e);
+        console.error("Config fetch failed:", e);
     }
-    }
+}
 
     initMobile();
 
@@ -46,18 +46,20 @@
     resultsDiv.innerHTML = '<div style="color:#555">Searching...</div>';
 
     try {
-    const apiUrl = window.location.origin + `/api/search?q=${encodeURIComponent(query)}`;
-    console.log("Fetching from:", apiUrl);
+        // This ensures it uses the SAME domain and HTTPS as the page you are on
+        const apiUrl = window.location.origin + `/api/search?q=${encodeURIComponent(query)}`;
+        console.log("Fetching from:", apiUrl);
 
-    const response = await fetch(apiUrl);
-    if (!response.ok) throw new Error('Network response was not ok');
+        const response = await fetch(apiUrl);
+        if (!response.ok) throw new Error('Network response was not ok');
 
-    const data = await response.json();
+        const data = await response.json();
+        // ... rest of your display code
     } catch (e) {
-    console.error("Fetch Error:", e);
-    resultsDiv.innerHTML = 'Error: ' + e.message;
+        console.error("Fetch Error:", e);
+        resultsDiv.innerHTML = 'Error: ' + e.message;
     }
-    }
+}
 
     async function addToQueue(videoId, title) {
     const name = prompt("Enter your name:");
