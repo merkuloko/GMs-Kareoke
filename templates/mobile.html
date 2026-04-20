@@ -39,65 +39,64 @@
         initMobile();
 
         async function searchSongs() {
-        const query = document.getElementById('songQuery').value;
-        const resultsDiv = document.getElementById('results');
-        if(!query) return;
+            const query = document.getElementById('songQuery').value;
+            const resultsDiv = document.getElementById('results');
+            if(!query) return;
 
-        resultsDiv.innerHTML = '<div class="spinner">Searching YouTube... 🎤</div>';
+            resultsDiv.innerHTML = '<div style="color:#555">Searching...</div>';
 
-        try {
-            const apiUrl = window.location.origin + `/api/search?q=${encodeURIComponent(query)}`;
-            console.log("Fetching from:", apiUrl);
+            try {
+                const apiUrl = window.location.origin + `/api/search?q=${encodeURIComponent(query)}`;
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('Network response was not ok');
 
-            const response = await fetch(apiUrl);
-            if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
+                resultsDiv.innerHTML = ''; // Clear "Searching..."
 
-            const data = await response.json();
-        } catch (e) {
-            console.error("Fetch Error:", e);
-            resultsDiv.innerHTML = 'Error: ' + e.message;
+                // MOVE THIS INSIDE THE FUNCTION
+                data.forEach(video => {
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+                    // Set up the click to add to queue
+                    div.onclick = () => addToQueue(video.id, video.title);
+
+                    const titleDiv = document.createElement('div');
+                    titleDiv.textContent = video.title; // SAFE XSS PROTECTION
+
+                    const img = document.createElement('img');
+                    img.src = video.thumbnail;
+
+                    div.appendChild(img);
+                    div.appendChild(titleDiv);
+                    resultsDiv.appendChild(div);
+                });
+
+            } catch (e) {
+                console.error("Fetch Error:", e);
+                resultsDiv.innerHTML = 'Error: ' + e.message;
+            }
         }
-    }
 
         async function addToQueue(videoId, title) {
-    const name = prompt("Enter your name:");
-    if (!name) return;
+            const name = prompt("Enter your name:");
+            if (!name) return;
 
-    // We use the supabase client we initialized at the top
-    const { data, error } = await _supabase
-        .from('live_queue')
-        .insert([
-            {
-                youtube_id: videoId,
-                title: title,
-                singer_name: name
+            const { data, error } = await _supabase
+                .from('live_queue')
+                .insert([{
+                    youtube_id: videoId,
+                    title: title,
+                    singer_name: name
+                }]);
+
+            if (error) {
+                alert("Error: " + error.message);
+            } else {
+                alert("Added to queue!");
+                document.getElementById('results').innerHTML = '';
+                document.getElementById('songQuery').value = '';
             }
-        ]);
-
-    if (error) {
-        console.error("Supabase Error:", error);
-        alert("Error: " + error.message); // This will tell us EXACTLY what's wrong
-    } else {
-        alert("Added to queue!");
-        document.getElementById('results').innerHTML = '';
-        document.getElementById('songQuery').value = '';
-    }
-}
-
-data.forEach(video => {
-    const div = document.createElement('div');
-    div.className = 'result-item';
-
-    const titleDiv = document.createElement('div');
-    titleDiv.textContent = video.title;
-
-    const img = document.createElement('img');
-    img.src = video.thumbnail;
-
-    div.appendChild(img);
-    div.appendChild(titleDiv);
-    resultsDiv.appendChild(div);
-});
+        }
     </script>
 </body>
 </html>
