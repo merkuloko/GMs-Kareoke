@@ -26,49 +26,31 @@
         let _supabase;
 
         async function initMobile() {
-            try {
-                const configUrl = window.location.origin + '/api/config';
-                const config = await fetch(configUrl).then(res => res.json());
-                _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
-                console.log("Mobile initialized securely");
-            } catch (e) {
-                console.error("Config fetch failed:", e);
-            }
-        }
+    try {
+        // SAFE: Use relative path so it matches HTTPS automatically
+        const config = await fetch('/api/config').then(res => res.json());
+        _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
+        console.log("Supabase initialized");
+    } catch (e) {
+        console.error("Config fetch failed:", e);
+    }
+}
 
-        initMobile();
-
-        async function searchSongs() {
+async function searchSongs() {
     const query = document.getElementById('songQuery').value.trim();
     const resultsDiv = document.getElementById('results');
     if (!query) return;
 
-    resultsDiv.innerHTML = '<div style="color:#888">Searching YouTube... 🎤</div>';
+    resultsDiv.innerHTML = '<div style="color:#555">Searching...</div>';
 
     try {
-        // Use a relative path first - this is the most compatible way on Vercel
-        const apiUrl = `/api/search?q=${encodeURIComponent(query)}`;
-        console.log("Attempting fetch to:", apiUrl);
+        // SAFE: Relative path ensures no CORS or Mixed Content errors
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
 
-        const response = await fetch(apiUrl, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-            }
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Server responded with ${response.status}`);
-        }
+        if (!response.ok) throw new Error('Server error');
 
         const data = await response.json();
         resultsDiv.innerHTML = '';
-
-        if (data.length === 0) {
-            resultsDiv.innerHTML = '<div style="color:#555">No results found.</div>';
-            return;
-        }
 
         data.forEach(video => {
             const div = document.createElement('div');
@@ -79,17 +61,15 @@
             img.src = video.thumbnail;
 
             const titleDiv = document.createElement('div');
-            titleDiv.textContent = video.title;
+            titleDiv.textContent = video.title; // XSS Protection
 
             div.appendChild(img);
             div.appendChild(titleDiv);
             resultsDiv.appendChild(div);
         });
-
     } catch (e) {
-        console.error("Detailed Fetch Error:", e);
-        // If it's a TypeError, it's usually a network/CORS block
-        resultsDiv.innerHTML = `<div style="color:#ff4060">Connection Error: Check your internet or Vercel logs.</div>`;
+        console.error("Fetch Error:", e);
+        resultsDiv.innerHTML = 'Error: Failed to connect to server.';
     }
 }
 
