@@ -1,3 +1,4 @@
+let _supabase = null;
 <!DOCTYPE html>
 <html>
 <head>
@@ -74,10 +75,15 @@ async function searchSongs() {
 }
 
         async function addToQueue(videoId, title) {
-            const name = prompt("Enter your name:");
-            if (!name) return;
+        if (!_supabase) {
+            alert("Remote is still connecting to database. Please wait 2 seconds and try again.");
+            return;
+        }
 
-            // Ensure _supabase is already initialized in initMobile()
+        const name = prompt("Enter your name:");
+        if (!name) return;
+
+        try {
             const { error } = await _supabase
                 .from('live_queue')
                 .insert([{
@@ -87,14 +93,19 @@ async function searchSongs() {
                 }]);
 
             if (error) {
-                console.error("Supabase Error:", error);
-                alert("Error: " + error.message); // This will tell you if it's an RLS issue
+                console.error("Supabase Error Details:", error);
+                alert("Database Error: " + error.message);
             } else {
                 alert("Added to queue!");
                 document.getElementById('results').innerHTML = '';
                 document.getElementById('songQuery').value = '';
             }
+        } catch (err) {
+            console.error("Critical Error:", err);
+            alert("Failed to send request. Check your internet.");
         }
+    }
+    initMobile();
     </script>
 </body>
 </html>
