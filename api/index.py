@@ -405,6 +405,30 @@ def queue_qr():
     )
     return jsonify({"url": qr_url, "target": MOBILE_QUEUE_URL})
 
+
+@app.route("/api/live-queue", methods=["POST"])
+def add_to_queue():
+    data = request.json
+    video_id = data.get("youtube_id")
+    title = data.get("title")
+    singer_name = data.get("singer_name")
+
+    if not all([video_id, title, singer_name]):
+        return jsonify({"error": "Missing song details"}), 400
+
+    try:
+        # Assuming you have initialized your supabase client as 'supabase'
+        result = supabase.table("live_queue").insert({
+            "youtube_id": video_id,
+            "title": title,
+            "singer_name": singer_name
+        }).execute()
+
+        return jsonify({"message": "Success"}), 200
+    except Exception as e:
+        print(f"Error adding to queue: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/mobile")
 def mobile_remote():
     return render_template("mobile.html")
