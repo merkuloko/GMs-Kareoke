@@ -8,6 +8,7 @@ from urllib.parse import quote_plus
 
 import requests
 from flask import Flask, jsonify, render_template, request
+from flask_cors import CORS
 
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +19,8 @@ app = Flask(
     template_folder=os.path.join(base_dir, "templates"),
     static_folder=os.path.join(base_dir, "static"),
 )
+
+CORS(app)
 
 HTTP_TIMEOUT_SECONDS = 10
 DEFAULT_DB_CANDIDATES = ("karaoke.db", "kareoke.db")
