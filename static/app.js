@@ -344,7 +344,11 @@ function updateQueueUI() {
     div.style.borderRadius = "3px";
     div.style.marginBottom = "5px";
     div.style.color = "#eee";
-    div.innerText = `${index + 1}. ${song.title}`;
+
+    const singer = song.requestor ? ` [${song.requestor}]` : "";
+
+    div.textContent = `${index + 1}. ${song.title}${singer}`;
+
     els.queueList.appendChild(div);
   });
 }
@@ -585,12 +589,18 @@ function updateLeaderboardUI() {
     div.style.color = "#eee";
 
     const left = document.createElement("span");
+
     const rank = document.createElement("strong");
     rank.style.marginRight = "6px";
     rank.style.color = index === 0 ? "#f5c842" : (index === 1 ? "#c0c0c0" : (index === 2 ? "#cd7f32" : "#888"));
     rank.textContent = `#${index + 1}`;
+
+    // Create a separate span for the name to keep it safe
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = ` ${entry.name}`; // SAFE: Sanitize name
+
     left.appendChild(rank);
-    left.append(document.createTextNode(` ${entry.name}`));
+    left.appendChild(nameSpan);
 
     const right = document.createElement("span");
     right.style.fontFamily = "'Space Mono', monospace";
@@ -667,31 +677,36 @@ els.resetRankBtn.addEventListener("click", () => {
 });
 
 async function initRealtimeQueue() {
-    const supabaseUrl = 'https://fllsztziccdfisqaxhyt.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsbHN6dHppY2NkZmlzcWF4aHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NjM4OTIsImV4cCI6MjA5MjIzOTg5Mn0.5RPpoDy8abhH7nyFJ7j9x3XzlzGIBOlRI8dex5FJscw';
-    const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+    try {
+        const config = await fetch('/api/config').then(res => res.json());
 
-    console.log("Listening for mobile requests...");
+        if (!config.supabase_url || !config.supabase_key) {
+            console.warn("Supabase credentials missing from config.");
+            return;
+        }
 
-    _supabase
-        .channel('public:live_queue')
-        .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'live_queue'
-        }, payload => {
-            console.log('New request from mobile!', payload.new);
+        const _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
 
-            // This adds the song to your "UP NEXT" list on the screen
-            addToQueue({
-                id: payload.new.youtube_id,
-                title: `${payload.new.title} (Requested by: ${payload.new.singer_name})`,
-                rhythm_map: []
-            });
-        })
-        .subscribe();
+        _supabase
+            .channel('public:live_queue')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'live_queue'
+            }, payload => {
+                addToQueue({
+                    id: payload.new.youtube_id,
+                    title: `${payload.new.title} (Requested by: ${payload.new.singer_name})`,
+                    rhythm_map: []
+                });
+            })
+            .subscribe();
+
+        console.log("Secure Realtime Bridge Active.");
+    } catch (err) {
+        console.error("Failed to initialize secure bridge:", err);
+    }
 }
-
 initRealtimeQueue();
 loadState();
 initUI();

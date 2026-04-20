@@ -256,24 +256,16 @@ def mobile_queue():
 
 @app.route("/api/config")
 def get_config():
-    config_error = None
-    try:
-        supabase_enabled = is_supabase_enabled()
-        if os.environ.get("SUPABASE_URL", "").strip() and not supabase_enabled:
-            get_supabase_credentials()
-    except RuntimeError as error:
-        config_error = str(error)
-        supabase_enabled = False
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY", "")
 
-    return jsonify(
-        {
-            "mobile_queue_url": MOBILE_QUEUE_URL,
-            "mobile_queue_enabled": bool(MOBILE_QUEUE_URL),
-            "songs_backend": "supabase" if supabase_enabled else "sqlite",
-            "supabase_error": config_error,
-            "leaderboard_backend": "supabase" if supabase_enabled else "local",
-        }
-    )
+    return jsonify({
+        "supabase_url": supabase_url,
+        "supabase_key": supabase_anon_key,
+        "mobile_queue_url": MOBILE_QUEUE_URL,
+        "mobile_queue_enabled": bool(MOBILE_QUEUE_URL),
+        "songs_backend": "supabase" if is_supabase_enabled() else "sqlite"
+    })
 
 
 @app.route("/api/songs")

@@ -23,9 +23,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        const supabaseUrl = 'https://fllsztziccdfisqaxhyt.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsbHN6dHppY2NkZmlzcWF4aHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NjM4OTIsImV4cCI6MjA5MjIzOTg5Mn0.5RPpoDy8abhH7nyFJ7j9x3XzlzGIBOlRI8dex5FJscw';
-        const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+        let _supabase;
+
+        async function initMobile() {
+            const config = await fetch(window.location.origin + '/api/config').then(res => res.json());
+            _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
+        }
+
+        initMobile();
 
         async function searchSongs() {
             const query = document.getElementById('songQuery').value;
@@ -71,6 +76,21 @@
         document.getElementById('songQuery').value = '';
     }
 }
+
+data.forEach(video => {
+    const div = document.createElement('div');
+    div.className = 'result-item';
+
+    const titleDiv = document.createElement('div');
+    titleDiv.textContent = video.title;
+
+    const img = document.createElement('img');
+    img.src = video.thumbnail;
+
+    div.appendChild(img);
+    div.appendChild(titleDiv);
+    resultsDiv.appendChild(div);
+});
     </script>
 </body>
 </html>
