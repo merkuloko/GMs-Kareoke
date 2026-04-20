@@ -48,11 +48,29 @@
         }
 
         async function addToQueue(videoId, title) {
-            const name = prompt("Enter your name:");
-            if (!name) return;
-            const { error } = await _supabase.from('live_queue').insert([{ youtube_id: videoId, title: title, singer_name: name }]);
-            if (!error) alert("Added to queue!");
-        }
+    const name = prompt("Enter your name:");
+    if (!name) return;
+
+    // We use the supabase client we initialized at the top
+    const { data, error } = await _supabase
+        .from('live_queue')
+        .insert([
+            {
+                youtube_id: videoId,
+                title: title,
+                singer_name: name
+            }
+        ]);
+
+    if (error) {
+        console.error("Supabase Error:", error);
+        alert("Error: " + error.message); // This will tell us EXACTLY what's wrong
+    } else {
+        alert("Added to queue!");
+        document.getElementById('results').innerHTML = '';
+        document.getElementById('songQuery').value = '';
+    }
+}
     </script>
 </body>
 </html>
