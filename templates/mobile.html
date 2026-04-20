@@ -14,7 +14,7 @@
     </style>
 </head>
 <body>
-    <h2 style="color:#4169E1">🎤 GMs REMOTE</h2>
+    <h2 style="color:#4169E1">GMs REMOTE</h2>
     <div class="search-box">
         <input type="text" id="songQuery" placeholder="Search song or artist...">
         <button onclick="searchSongs()">SEARCH</button>
@@ -43,7 +43,7 @@
         const resultsDiv = document.getElementById('results');
         if(!query) return;
 
-        resultsDiv.innerHTML = '<div style="color:#555">Searching...</div>';
+        resultsDiv.innerHTML = '<div class="spinner">Searching YouTube... 🎤</div>';
 
         try {
             const apiUrl = window.location.origin + `/api/search?q=${encodeURIComponent(query)}`;
