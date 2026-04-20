@@ -570,6 +570,7 @@ async function toggleMic() {
   }
 }
 
+
 function updateLeaderboardUI() {
   els.rankList.innerHTML = "";
   if (leaderboardData.length === 0) {
