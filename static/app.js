@@ -666,12 +666,12 @@ els.resetRankBtn.addEventListener("click", () => {
   void clearLeaderboard();
 });
 
-// ─── Supabase Realtime Listener ─────────────────────────
-async function initRealtime() {
+async function initRealtimeQueue() {
     const supabaseUrl = 'https://fllsztziccdfisqaxhyt.supabase.co';
-    // Use your real Anon Key from your .env file here:
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsbHN6dHppY2NkZmlzcWF4aHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NjM4OTIsImV4cCI6MjA5MjIzOTg5Mn0.5RPpoDy8abhH7nyFJ7j9x3XzlzGIBOlRI8dex5FJscw';
     const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+    console.log("Listening for mobile requests...");
 
     _supabase
         .channel('public:live_queue')
@@ -680,9 +680,9 @@ async function initRealtime() {
             schema: 'public',
             table: 'live_queue'
         }, payload => {
-            console.log('Mobile request received:', payload.new);
+            console.log('New request from mobile!', payload.new);
 
-            // Add to the main queue instantly
+            // This adds the song to your "UP NEXT" list on the screen
             addToQueue({
                 id: payload.new.youtube_id,
                 title: `${payload.new.title} (Requested by: ${payload.new.singer_name})`,
@@ -692,7 +692,7 @@ async function initRealtime() {
         .subscribe();
 }
 
-initRealtime();
+initRealtimeQueue();
 loadState();
 initUI();
 updateRhythmUI();
