@@ -1,108 +1,145 @@
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <title>GMs Karaoke Remote</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
-    <style>
-    body { background: #080808; color: white; font-family: 'Outfit', sans-serif; padding: 20px; }
-    .search-box { display: flex; gap: 8px; margin-bottom: 20px; }
-    input { flex: 1; padding: 12px; background: #1a1a1a; border: 1px solid #333; color: white; border-radius: 6px; }
-    button { background: #4169E1; color: white; padding: 12px 20px; border: none; border-radius: 6px; font-weight: bold; }
-    .result-item { display: flex; align-items: center; gap: 12px; background: #121212; padding: 10px; border: 1px solid #222; border-radius: 8px; margin-bottom: 10px; text-align: left; }
-    .result-item img { width: 60px; border-radius: 4px; }
-    </style>
-    </head>
-    <body>
-    <h2 style="color:#4169E1">GMs REMOTE</h2>
-    <div class="search-box">
-    <input type="text" id="songQuery" placeholder="Search song or artist...">
-    <button onclick="searchSongs()">SEARCH</button>
-    </div>
-    <div id="results"></div>
+<!DOCTYPE html>
+<html>
+<head>
+<title>GMs Karaoke Remote</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+body { background: #080808; color: white; font-family: 'Outfit', sans-serif; padding: 20px; }
+.search-box { display: flex; gap: 8px; margin-bottom: 15px; }
+input { flex: 1; padding: 12px; background: #1a1a1a; border: 1px solid #333; color: white; border-radius: 6px; }
+button { background: #4169E1; color: white; padding: 12px 20px; border: none; border-radius: 6px; font-weight: bold; }
+.result-item { display: flex; align-items: center; gap: 12px; background: #121212; padding: 10px; border: 1px solid #222; border-radius: 8px; margin-bottom: 10px; text-align: left; }
+.result-item img { width: 60px; border-radius: 4px; }
+.user-bar { font-size: 0.9em; color: #888; margin-bottom: 20px; }
+.change-btn { background: none; border: none; color: #4169E1; text-decoration: underline; padding: 0; margin-left: 10px; cursor: pointer; font-family: inherit; }
+</style>
+</head>
+<body>
+<h2 style="color:#4169E1; margin-bottom: 5px;">GMs REMOTE</h2>
 
-    <script>
-        function getFriendlyError(error) {
-            if (error instanceof TypeError) {
-                return "Cannot reach the karaoke server. If you used a localhost QR code, replace it with your computer's LAN IP.";
-            }
+<div class="user-bar">
+    Singing as: <span id="singerDisplay" style="color: white; font-weight: bold;">Guest</span>
+    <button class="change-btn" onclick="changeName()">Change</button>
+</div>
 
-            return error.message || "Request failed";
-        }
+<div class="search-box">
+<input type="text" id="songQuery" placeholder="Search song or artist...">
+<button onclick="searchSongs()">SEARCH</button>
+</div>
+<div id="results"></div>
 
-        async function searchSongs() {
-            const query = document.getElementById('songQuery').value.trim();
-            const resultsDiv = document.getElementById('results');
-            if (!query) return;
+<script>
+    // --- NEW: Name Management Logic ---
+    window.onload = () => {
+        const savedName = localStorage.getItem('karaoke_name');
+        if (savedName) document.getElementById('singerDisplay').textContent = savedName;
+    };
 
-            // Immediate feedback helps with perceived speed
-            resultsDiv.innerHTML = '<div style="color:#4169E1">Connecting to YouTube... 🎤</div>';
-
-            try {
-                const apiUrl = `/api/search?q=${encodeURIComponent(query)}`;
-                const response = await fetch(apiUrl);
-
-                if (!response.ok) {
-                    const data = await response.json().catch(() => ({}));
-                    throw new Error(data.error || 'Server busy');
-                }
-
-                const data = await response.json();
-                resultsDiv.innerHTML = ''; // Clear loading text
-
-                if (data.length === 0) {
-                    resultsDiv.innerHTML = '<div style="color:#888">No songs found.</div>';
-                    return;
-                }
-
-                data.forEach(video => {
-                    const div = document.createElement('div');
-                    div.className = 'result-item';
-                    div.onclick = () => addToQueue(video.id, video.title);
-
-                    const img = document.createElement('img');
-                    img.src = video.thumbnail;
-
-                    const titleDiv = document.createElement('div');
-                    titleDiv.textContent = video.title; // XSS Protection
-
-                    div.appendChild(img);
-                    div.appendChild(titleDiv);
-                    resultsDiv.appendChild(div);
-                });
-            } catch (e) {
-                console.error("Search Error:", e);
-                resultsDiv.innerHTML = `<div style="color:#ff4060">${getFriendlyError(e)}</div>`;
+    function getSingerName() {
+        let name = localStorage.getItem('karaoke_name');
+        if (!name) {
+            name = prompt("Enter your name to join the queue:");
+            if (name && name.trim() !== "") {
+                localStorage.setItem('karaoke_name', name.trim());
+                document.getElementById('singerDisplay').textContent = name.trim();
+            } else {
+                return null; // User cancelled
             }
         }
+        return name;
+    }
 
-        async function addToQueue(videoId, title) {
-            const name = prompt("Enter your name:");
-            if (!name) return;
+    function changeName() {
+        const current = localStorage.getItem('karaoke_name') || "";
+        const newName = prompt("Change your name:", current);
+        if (newName && newName.trim() !== "") {
+            localStorage.setItem('karaoke_name', newName.trim());
+            document.getElementById('singerDisplay').textContent = newName.trim();
+        }
+    }
+    // ----------------------------------
 
-            try {
-                const response = await fetch('/api/live-queue', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        youtube_id: videoId,
-                        title: title,
-                        singer_name: name.trim()
-                    })
-                });
+    function getFriendlyError(error) {
+        if (error instanceof TypeError) {
+            return "Cannot reach the karaoke server. Check your connection.";
+        }
+        return error.message || "Request failed";
+    }
 
+    async function searchSongs() {
+        const query = document.getElementById('songQuery').value.trim();
+        const resultsDiv = document.getElementById('results');
+        if (!query) return;
+
+        resultsDiv.innerHTML = '<div style="color:#4169E1">Connecting to YouTube... 🎤</div>';
+
+        try {
+            const apiUrl = `/api/search?q=${encodeURIComponent(query)}`;
+            const response = await fetch(apiUrl);
+
+            if (!response.ok) {
                 const data = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(data.error || 'Failed to add to queue');
-                }
-
-                alert("Added to queue!");
-                document.getElementById('results').innerHTML = '';
-                document.getElementById('songQuery').value = '';
-            } catch (error) {
-                alert("Error: " + getFriendlyError(error));
+                throw new Error(data.error || 'Server busy');
             }
+
+            const data = await response.json();
+            resultsDiv.innerHTML = ''; 
+
+            if (data.length === 0) {
+                resultsDiv.innerHTML = '<div style="color:#888">No songs found.</div>';
+                return;
+            }
+
+            data.forEach(video => {
+                const div = document.createElement('div');
+                div.className = 'result-item';
+                div.onclick = () => addToQueue(video.id, video.title);
+
+                const img = document.createElement('img');
+                img.src = video.thumbnail;
+
+                const titleDiv = document.createElement('div');
+                titleDiv.textContent = video.title; 
+
+                div.appendChild(img);
+                div.appendChild(titleDiv);
+                resultsDiv.appendChild(div);
+            });
+        } catch (e) {
+            console.error("Search Error:", e);
+            resultsDiv.innerHTML = `<div style="color:#ff4060">${getFriendlyError(e)}</div>`;
         }
-    </script>
-    </body>
-    </html>
+    }
+
+    async function addToQueue(videoId, title) {
+        // Automatically grabs the saved name, or asks if it's their first time!
+        const name = getSingerName();
+        if (!name) return;
+
+        try {
+            const response = await fetch('/api/live-queue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    youtube_id: videoId,
+                    title: title,
+                    singer_name: name
+                })
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to add to queue');
+            }
+
+            alert("Added to queue!");
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('songQuery').value = '';
+        } catch (error) {
+            alert("Error: " + getFriendlyError(error));
+        }
+    }
+</script>
+</body>
+</html>
