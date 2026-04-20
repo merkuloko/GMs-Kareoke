@@ -71,10 +71,12 @@ def normalize_song(song):
 
 def get_supabase_credentials():
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    print(f"DEBUG: Current URL is: {url}")
+
     key = (
-        os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-        or os.environ.get("SUPABASE_ANON_KEY", "").strip()
-        or os.environ.get("SUPABASE_KEY", "").strip()
+            os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+            or os.environ.get("SUPABASE_ANON_KEY", "").strip()
+            or os.environ.get("SUPABASE_KEY", "").strip()
     )
 
     if bool(url) != bool(key):
