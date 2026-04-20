@@ -682,12 +682,29 @@ async function initRealtimeQueue() {
         const config = await fetch('/api/config').then(res => res.json());
 
         if (!config.supabase_url || !config.supabase_key) {
-            console.warn("Supabase credentials missing from config.");
+            console.warn("Supabase credentials missing.");
             return;
         }
 
         const _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
 
+        // --- NEW: FETCH EXISTING UNPLAYED SONGS ON LOAD ---
+        const { data: existingSongs, error } = await _supabase
+            .from('live_queue')
+            .select('*')
+            .eq('is_played', false)
+            .order('created_at', { ascending: true });
+
+        if (!error && existingSongs) {
+            existingSongs.forEach(song => {
+                addToQueue({
+                    id: song.youtube_id,
+                    title: song.title,
+                    requestor: song.singer_name,
+                    rhythm_map: []
+                });
+            });
+        }
         _supabase
             .channel('public:live_queue')
             .on('postgres_changes', {
@@ -697,7 +714,8 @@ async function initRealtimeQueue() {
             }, payload => {
                 addToQueue({
                     id: payload.new.youtube_id,
-                    title: `${payload.new.title} (Requested by: ${payload.new.singer_name})`,
+                    title: payload.new.title,
+                    requestor: payload.new.singer_name,
                     rhythm_map: []
                 });
             })
