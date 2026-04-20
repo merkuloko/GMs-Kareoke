@@ -19,7 +19,6 @@ app = Flask(
     template_folder=os.path.join(base_dir, "templates"),
     static_folder=os.path.join(base_dir, "static"),
 )
-
 CORS(app)
 
 HTTP_TIMEOUT_SECONDS = 10
