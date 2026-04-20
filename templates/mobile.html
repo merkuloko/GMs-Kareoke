@@ -1,111 +1,103 @@
-<!DOCTYPE html>
-let _supabase = null;
-<html>
-<head>
+    <!DOCTYPE html>
+    <html>
+    <head>
     <title>GMs Karaoke Remote</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body { background: #080808; color: white; font-family: 'Outfit', sans-serif; padding: 20px; }
-        .search-box { display: flex; gap: 8px; margin-bottom: 20px; }
-        input { flex: 1; padding: 12px; background: #1a1a1a; border: 1px solid #333; color: white; border-radius: 6px; }
-        button { background: #4169E1; color: white; padding: 12px 20px; border: none; border-radius: 6px; font-weight: bold; }
-        .result-item { display: flex; align-items: center; gap: 12px; background: #121212; padding: 10px; border: 1px solid #222; border-radius: 8px; margin-bottom: 10px; text-align: left; }
-        .result-item img { width: 60px; border-radius: 4px; }
+    body { background: #080808; color: white; font-family: 'Outfit', sans-serif; padding: 20px; }
+    .search-box { display: flex; gap: 8px; margin-bottom: 20px; }
+    input { flex: 1; padding: 12px; background: #1a1a1a; border: 1px solid #333; color: white; border-radius: 6px; }
+    button { background: #4169E1; color: white; padding: 12px 20px; border: none; border-radius: 6px; font-weight: bold; }
+    .result-item { display: flex; align-items: center; gap: 12px; background: #121212; padding: 10px; border: 1px solid #222; border-radius: 8px; margin-bottom: 10px; text-align: left; }
+    .result-item img { width: 60px; border-radius: 4px; }
     </style>
-</head>
-<body>
+    </head>
+    <body>
     <h2 style="color:#4169E1">GMs REMOTE</h2>
     <div class="search-box">
-        <input type="text" id="songQuery" placeholder="Search song or artist...">
-        <button onclick="searchSongs()">SEARCH</button>
+    <input type="text" id="songQuery" placeholder="Search song or artist...">
+    <button onclick="searchSongs()">SEARCH</button>
     </div>
     <div id="results"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        let _supabase;
+    let _supabase;
 
-        async function initMobile() {
+    async function initMobile() {
     try {
-        // SAFE: Use relative path so it matches HTTPS automatically
-        const config = await fetch('/api/config').then(res => res.json());
-        _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
-        console.log("Supabase initialized");
+    const configUrl = window.location.origin + '/api/config';
+    const config = await fetch(configUrl).then(res => res.json());
+    _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
+    console.log("Mobile initialized securely");
     } catch (e) {
-        console.error("Config fetch failed:", e);
+    console.error("Config fetch failed:", e);
     }
-}
+    }
 
-async function searchSongs() {
-    const query = document.getElementById('songQuery').value.trim();
+    initMobile();
+
+    async function searchSongs() {
+    const query = document.getElementById('songQuery').value;
     const resultsDiv = document.getElementById('results');
-    if (!query) return;
+    if(!query) return;
 
     resultsDiv.innerHTML = '<div style="color:#555">Searching...</div>';
 
     try {
-        // SAFE: Relative path ensures no CORS or Mixed Content errors
-        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+    const apiUrl = window.location.origin + `/api/search?q=${encodeURIComponent(query)}`;
+    console.log("Fetching from:", apiUrl);
 
-        if (!response.ok) throw new Error('Server error');
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error('Network response was not ok');
 
-        const data = await response.json();
-        resultsDiv.innerHTML = '';
-
-        data.forEach(video => {
-            const div = document.createElement('div');
-            div.className = 'result-item';
-            div.onclick = () => addToQueue(video.id, video.title);
-
-            const img = document.createElement('img');
-            img.src = video.thumbnail;
-
-            const titleDiv = document.createElement('div');
-            titleDiv.textContent = video.title; // XSS Protection
-
-            div.appendChild(img);
-            div.appendChild(titleDiv);
-            resultsDiv.appendChild(div);
-        });
+    const data = await response.json();
     } catch (e) {
-        console.error("Fetch Error:", e);
-        resultsDiv.innerHTML = 'Error: Failed to connect to server.';
+    console.error("Fetch Error:", e);
+    resultsDiv.innerHTML = 'Error: ' + e.message;
     }
-}
-
-        async function addToQueue(videoId, title) {
-        if (!_supabase) {
-            alert("Remote is still connecting to database. Please wait 2 seconds and try again.");
-            return;
-        }
-
-        const name = prompt("Enter your name:");
-        if (!name) return;
-
-        try {
-            const { error } = await _supabase
-                .from('live_queue')
-                .insert([{
-                    youtube_id: videoId,
-                    title: title,
-                    singer_name: name
-                }]);
-
-            if (error) {
-                console.error("Supabase Error Details:", error);
-                alert("Database Error: " + error.message);
-            } else {
-                alert("Added to queue!");
-                document.getElementById('results').innerHTML = '';
-                document.getElementById('songQuery').value = '';
-            }
-        } catch (err) {
-            console.error("Critical Error:", err);
-            alert("Failed to send request. Check your internet.");
-        }
     }
-    initMobile();
+
+    async function addToQueue(videoId, title) {
+    const name = prompt("Enter your name:");
+    if (!name) return;
+
+    // We use the supabase client we initialized at the top
+    const { data, error } = await _supabase
+    .from('live_queue')
+    .insert([
+    {
+    youtube_id: videoId,
+    title: title,
+    singer_name: name
+    }
+    ]);
+
+    if (error) {
+    console.error("Supabase Error:", error);
+    alert("Error: " + error.message); // This will tell us EXACTLY what's wrong
+    } else {
+    alert("Added to queue!");
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('songQuery').value = '';
+    }
+    }
+
+    data.forEach(video => {
+    const div = document.createElement('div');
+    div.className = 'result-item';
+
+    const titleDiv = document.createElement('div');
+    titleDiv.textContent = video.title;
+
+    const img = document.createElement('img');
+    img.src = video.thumbnail;
+
+    div.appendChild(img);
+    div.appendChild(titleDiv);
+    resultsDiv.appendChild(div);
+    });
     </script>
-</body>
-</html>
+    </body>
+    </html>
