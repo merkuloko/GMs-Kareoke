@@ -417,12 +417,17 @@ def add_to_queue():
         return jsonify({"error": "Missing song details"}), 400
 
     try:
-        # Assuming you have initialized your supabase client as 'supabase'
-        result = supabase.table("live_queue").insert({
-            "youtube_id": video_id,
-            "title": title,
-            "singer_name": singer_name
-        }).execute()
+        # Use your existing helper function instead of the 'supabase' variable
+        supabase_request(
+            "POST",
+            "live_queue",  # The table name
+            payload={
+                "youtube_id": video_id,
+                "title": title,
+                "singer_name": singer_name
+            },
+            prefer="return=minimal"
+        )
 
         return jsonify({"message": "Success"}), 200
     except Exception as e:
