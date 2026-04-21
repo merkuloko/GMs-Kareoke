@@ -372,7 +372,7 @@ def search_youtube():
     return jsonify(results)
 
 
-@app.route("/api/leaderboard", methods=["POST"])
+# 1. ONLY use GET for fetching the leaderboard
 @app.route("/api/leaderboard", methods=["GET"])
 def get_leaderboard():
     try:
@@ -382,7 +382,7 @@ def get_leaderboard():
     except requests.RequestException:
         return jsonify({"error": "Leaderboard service unavailable"}), 502
 
-
+# 2. ONLY use POST for saving the score
 @app.route("/api/leaderboard", methods=["POST"])
 def save_score():
     data = request.get_json(silent=True) or {}
