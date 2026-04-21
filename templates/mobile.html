@@ -71,7 +71,7 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
         const resultsDiv = document.getElementById('results');
         if (!query) return;
 
-        resultsDiv.innerHTML = '<div style="color:#4169E1">Connecting to YouTube... 🎤</div>';
+        resultsDiv.innerHTML = '<div style="color:#4169E1">Connecting to YouTube... </div>';
 
         try {
             const apiUrl = `/api/search?q=${encodeURIComponent(query)}`;
@@ -112,7 +112,6 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
     }
 
     async function addToQueue(videoId, title) {
-        // Automatically grabs the saved name, or asks if it's their first time!
         const name = getSingerName();
         if (!name) return;
 
