@@ -450,6 +450,21 @@ def add_to_queue():
         print(f"Error adding to queue: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/live-queue", methods=["DELETE"])
+def clear_live_queue():
+    try:
+        # Deletes all songs currently in the live_queue table
+        supabase_request(
+            "DELETE",
+            "live_queue",
+            query_string="id=gt.0",
+            prefer="return=minimal"
+        )
+        return jsonify({"message": "Queue cleared"}), 200
+    except Exception as e:
+        print(f"Error clearing queue: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/mobile")
 def mobile_remote():
     return render_template("mobile.html")

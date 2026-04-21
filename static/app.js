@@ -28,6 +28,7 @@ let duration = 0;
 
 const els = {
   loader: document.getElementById("player-loader"),
+  clearQueueBtn: document.getElementById("clear-queue-btn"),
   standbyImg: document.getElementById("player-standby-img"),
   scoreValue: document.getElementById("score-value"),
   scoreHint: document.getElementById("score-hint"),
@@ -613,6 +614,26 @@ els.nextBtn.addEventListener("click", () => {
   currentRhythmMap = [];
   updateRhythmUI();
   showError("Queue is empty. Search for a song.");
+
+  // --- NEW CLEAR QUEUE LOGIC ---
+async function clearQueue() {
+    if (!confirm("Are you sure you want to clear the entire queue?")) return;
+
+    // 1. Wipe local memory immediately for a snappy UI
+    songQueue = [];
+    updateQueueUI();
+    saveState();
+
+    // 2. Tell the Python backend to wipe the database
+    try {
+        await fetch('/api/live-queue', { method: 'DELETE' });
+    } catch (e) {
+        console.error("Failed to clear remote queue:", e);
+    }
+}
+
+els.clearQueueBtn.addEventListener("click", clearQueue);
+// -----------------------------
 });
 
 els.infoBtn.addEventListener("click", () => els.modal.style.display = "flex");
