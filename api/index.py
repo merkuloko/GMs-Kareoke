@@ -252,6 +252,20 @@ def home():
         mobile_queue_enabled=bool(MOBILE_QUEUE_URL),
     )
 
+@app.route("/api/live-queue/<item_id>", methods=["PATCH"])
+def mark_queue_played(item_id):
+    try:
+        # This tells Supabase to change is_played to TRUE
+        supabase_request(
+            "PATCH",
+            "live_queue",
+            query_string=f"id=eq.{item_id}",
+            payload={"is_played": True}
+        )
+        return jsonify({"message": "Success"}), 200
+    except Exception as e:
+        print(f"Error marking played: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/mobile")
 def mobile_queue():

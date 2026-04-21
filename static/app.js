@@ -8,6 +8,10 @@ let currentSongTitle = "Karaoke Song";
 let songQueue = [];
 let leaderboardData = [];
 
+// NEW VARIABLES: Track who is currently singing!
+let currentSinger = null;
+let currentQueueDbId = null;
+
 let player;
 let playerReady = false;
 let pendingAutoplay = false;
@@ -122,7 +126,6 @@ async function loadLeaderboard() {
     loadLeaderboardFallback();
     return;
   }
-
   updateLeaderboardUI();
 }
 
@@ -135,11 +138,8 @@ async function submitLeaderboardScore(scoreData) {
     });
     await loadLeaderboard();
   } catch (error) {
-    try {
-      saveLeaderboardFallback();
-    } catch (storageError) {
-      console.error("Failed to update leaderboard fallback:", storageError);
-    }
+    console.error("Leaderboard Save Error:", error);
+    saveLeaderboardFallback();
   }
 }
 
@@ -155,10 +155,12 @@ async function clearLeaderboard() {
   updateLeaderboardUI();
 }
 
+// UPDATED: Now saves the DB ID and Requestor Name
 function normalizeSong(song) {
   return {
     id: song.youtube_id || song.id,
-    songId: song.id,
+    db_id: song.db_id || null,
+    requestor: song.requestor || null,
     title: song.title || "Untitled",
     artist: song.artist || "",
     rhythm_map: Array.isArray(song.rhythm_map) ? song.rhythm_map : [],
@@ -183,18 +185,8 @@ function resetScore() {
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   let data = null;
-
-  try {
-    data = await response.json();
-  } catch (error) {
-    data = null;
-  }
-
-  if (!response.ok) {
-    const message = data && data.error ? data.error : "Request failed";
-    throw new Error(message);
-  }
-
+  try { data = await response.json(); } catch (error) {}
+  if (!response.ok) throw new Error(data && data.error ? data.error : "Request failed");
   return data;
 }
 
@@ -215,7 +207,6 @@ async function loadSongMenu() {
 async function loadQueueQr() {
   const enabled = document.body.dataset.mobileQueueEnabled === "true";
   if (!enabled) return;
-
   try {
     const qr = await fetchJson("/api/queue-qr");
     els.queueQrImage.src = qr.url;
@@ -241,7 +232,6 @@ function renderSearchResult(video) {
 
   const img = document.createElement("img");
   img.src = video.thumbnail;
-  img.alt = "";
   img.style.width = "50px";
   img.style.borderRadius = "3px";
 
@@ -264,22 +254,14 @@ function renderSearchResult(video) {
 async function searchYouTube() {
   const query = els.searchInput.value.trim();
   if (!query) return;
-
   clearError();
   els.searchResults.innerHTML = '<div style="font-size:12px; color:#555;">Searching...</div>';
 
   try {
     const results = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
     els.searchResults.innerHTML = "";
-
-    if (results.length === 0) {
-      els.searchResults.innerHTML = '<div style="font-size:12px; color:#555;">No results found</div>';
-      return;
-    }
-
-    results.forEach((video) => {
-      els.searchResults.appendChild(renderSearchResult(video));
-    });
+    if (results.length === 0) return els.searchResults.innerHTML = '<div style="font-size:12px; color:#555;">No results found</div>';
+    results.forEach((video) => els.searchResults.appendChild(renderSearchResult(video)));
   } catch (error) {
     els.searchResults.innerHTML = '<div style="color:red">Search failed</div>';
     showError(error.message);
@@ -308,20 +290,29 @@ function playVideo(videoId) {
     pendingAutoplay = true;
     return;
   }
-
-  player.loadVideoById({
-    videoId,
-    startSeconds: 0,
-  });
+  player.loadVideoById({ videoId, startSeconds: 0 });
 }
 
 function playNextInQueue() {
   if (songQueue.length === 0) {
     pendingAutoplay = false;
+    currentSinger = null;
+    currentQueueDbId = null;
     return;
   }
 
   const nextSong = songQueue.shift();
+
+  // NEW: Memorize the singer and the DB ID
+  currentSinger = nextSong.requestor || null;
+  currentQueueDbId = nextSong.db_id || null;
+
+  // NEW: Tell Supabase this song is now playing (so it vanishes for others)
+  if (currentQueueDbId) {
+      fetch(`/api/live-queue/${currentQueueDbId}`, { method: 'PATCH' })
+          .catch(e => console.error("Failed to mark as played:", e));
+  }
+
   setCurrentSong(nextSong);
   playVideo(currentVideoId);
   updateQueueUI();
@@ -330,11 +321,7 @@ function playNextInQueue() {
 
 function updateQueueUI() {
   els.queueList.innerHTML = "";
-
-  if (songQueue.length === 0) {
-    els.queueList.innerHTML = '<div style="font-size: 12px; color: #555;">Queue is empty</div>';
-    return;
-  }
+  if (songQueue.length === 0) return els.queueList.innerHTML = '<div style="font-size: 12px; color: #555;">Queue is empty</div>';
 
   songQueue.forEach((song, index) => {
     const div = document.createElement("div");
@@ -345,17 +332,14 @@ function updateQueueUI() {
     div.style.marginBottom = "5px";
     div.style.color = "#eee";
 
-    const singer = song.requestor ? ` [${song.requestor}]` : "";
-
-    div.textContent = `${index + 1}. ${song.title}${singer}`;
-
+    const singer = song.requestor ? ` <span style="color:#00e5b0">[${song.requestor}]</span>` : "";
+    div.innerHTML = `${index + 1}. ${song.title}${singer}`;
     els.queueList.appendChild(div);
   });
 }
 
 function updateRhythmUI() {
   els.legendGrid.innerHTML = "";
-
   if (currentRhythmMap.length === 0) {
     els.legendGrid.innerHTML = '<div style="color:#00e5b0; border: 1px solid #00e5b044; padding: 10px; background: #00e5b011; border-radius: 4px;">Free-for-All Mode</div>';
     buildTimelineZones();
@@ -365,20 +349,16 @@ function updateRhythmUI() {
   currentRhythmMap.forEach((zone) => {
     const chip = document.createElement("div");
     chip.className = "legend-chip";
-
     const label = document.createElement("span");
     label.className = "chip-label";
     label.textContent = zone.label;
-
     const time = document.createElement("span");
     time.className = "chip-time";
     time.textContent = `${zone.start}s - ${zone.end}s`;
-
     chip.appendChild(label);
     chip.appendChild(time);
     els.legendGrid.appendChild(chip);
   });
-
   buildTimelineZones();
 }
 
@@ -400,7 +380,6 @@ window.onYouTubeIframeAPIReady = function onYouTubeIframeAPIReady() {
         duration = event.target.getDuration();
         buildTimelineZones();
         clearError();
-
         if (pendingAutoplay && songQueue.length > 0) {
           pendingAutoplay = false;
           playNextInQueue();
@@ -419,7 +398,15 @@ window.onYouTubeIframeAPIReady = function onYouTubeIframeAPIReady() {
 
         if (event.data === YT.PlayerState.ENDED) {
           if (score > 0) {
-            let singerName = prompt(`Great job! Your score was ${score}.\nEnter your name for the leaderboard:`) || "Anonymous Singer";
+            let singerName = currentSinger;
+
+            // NEW: If we know the singer, skip the prompt!
+            if (singerName) {
+                alert(`Great job ${singerName}! Your score was ${score}.`);
+            } else {
+                singerName = prompt(`Great job! Your score was ${score}.\nEnter your name for the leaderboard:`) || "Anonymous Singer";
+            }
+
             singerName = singerName.trim() || "Anonymous Singer";
 
             const scoreData = {
@@ -434,10 +421,8 @@ window.onYouTubeIframeAPIReady = function onYouTubeIframeAPIReady() {
             void submitLeaderboardScore(scoreData);
             resetScore();
           }
-
           playNextInQueue();
         }
-
         updateHint();
       },
     },
@@ -446,7 +431,6 @@ window.onYouTubeIframeAPIReady = function onYouTubeIframeAPIReady() {
 
 function buildTimelineZones() {
   if (!duration) return;
-
   els.beatZonesContainer.innerHTML = "";
   currentRhythmMap.forEach((zone, index) => {
     const div = document.createElement("div");
@@ -469,7 +453,6 @@ function getRMS(data) {
 
 function startLoop() {
   cancelAnimationFrame(rafId);
-
   function loop() {
     if (!isPlaying || !micActive || !analyser) return;
 
@@ -477,9 +460,7 @@ function startLoop() {
     const rms = getRMS(dataArray);
     isSinging = rms > RMS_THRESHOLD;
     const currentTime = player.getCurrentTime() || 0;
-    if (duration) {
-      els.timelineProgress.style.width = `${(currentTime / duration) * 100}%`;
-    }
+    if (duration) els.timelineProgress.style.width = `${(currentTime / duration) * 100}%`;
 
     let onBeat = currentRhythmMap.length === 0;
     currentRhythmMap.forEach((zone, index) => {
@@ -500,7 +481,6 @@ function startLoop() {
     updateHint();
     rafId = requestAnimationFrame(loop);
   }
-
   loop();
 }
 
@@ -521,16 +501,8 @@ function updateVUUI(rms) {
 }
 
 function updateHint() {
-  if (!micActive) {
-    els.scoreHint.innerText = "Enable mic to start scoring";
-    return;
-  }
-
-  if (!isPlaying) {
-    els.scoreHint.innerText = "Press play to begin";
-    return;
-  }
-
+  if (!micActive) return els.scoreHint.innerText = "Enable mic to start scoring";
+  if (!isPlaying) return els.scoreHint.innerText = "Press play to begin";
   els.scoreHint.innerText = isSinging ? "Keep singing!" : (currentRhythmMap.length === 0 ? "Sing anytime!" : "Sing on the teal zones");
 }
 
@@ -570,13 +542,9 @@ async function toggleMic() {
   }
 }
 
-
 function updateLeaderboardUI() {
   els.rankList.innerHTML = "";
-  if (leaderboardData.length === 0) {
-    els.rankList.innerHTML = '<div style="font-size: 12px; color: #555;">No scores yet</div>';
-    return;
-  }
+  if (leaderboardData.length === 0) return els.rankList.innerHTML = '<div style="font-size: 12px; color: #555;">No scores yet</div>';
 
   leaderboardData.sort((a, b) => b.score - a.score);
   leaderboardData.slice(0, 5).forEach((entry, index) => {
@@ -590,15 +558,13 @@ function updateLeaderboardUI() {
     div.style.color = "#eee";
 
     const left = document.createElement("span");
-
     const rank = document.createElement("strong");
     rank.style.marginRight = "6px";
     rank.style.color = index === 0 ? "#f5c842" : (index === 1 ? "#c0c0c0" : (index === 2 ? "#cd7f32" : "#888"));
     rank.textContent = `#${index + 1}`;
 
-    // Create a separate span for the name to keep it safe
     const nameSpan = document.createElement("span");
-    nameSpan.textContent = ` ${entry.name}`; // SAFE: Sanitize name
+    nameSpan.textContent = ` ${entry.name}`;
 
     left.appendChild(rank);
     left.appendChild(nameSpan);
@@ -617,7 +583,6 @@ function updateLeaderboardUI() {
 els.songSelect.addEventListener("change", async (event) => {
   const songId = event.target.value;
   if (!songId) return;
-
   try {
     const songData = await fetchJson(`/api/songs/${songId}`);
     songQueue = [];
@@ -626,34 +591,22 @@ els.songSelect.addEventListener("change", async (event) => {
     playVideo(currentVideoId);
     saveState();
     clearError();
-  } catch (error) {
-    showError(error.message);
-  }
+  } catch (error) { showError(error.message); }
 });
 
 els.searchBtn.addEventListener("click", searchYouTube);
-els.searchInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    searchYouTube();
-  }
-});
+els.searchInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); searchYouTube(); } });
 els.micBtn.addEventListener("click", toggleMic);
-els.resetBtn.addEventListener("click", () => {
-  resetScore();
-  clearError();
-});
+els.resetBtn.addEventListener("click", () => { resetScore(); clearError(); });
 els.nextBtn.addEventListener("click", () => {
   cancelAnimationFrame(rafId);
   els.beatZonesContainer.innerHTML = "";
   els.timelineProgress.style.width = "0%";
-
   if (songQueue.length > 0) {
     playNextInQueue();
     clearError();
     return;
   }
-
   if (playerReady) player.stopVideo();
   els.loader.style.display = "flex";
   els.standbyImg.style.display = "block";
@@ -662,33 +615,17 @@ els.nextBtn.addEventListener("click", () => {
   showError("Queue is empty. Search for a song.");
 });
 
-els.infoBtn.addEventListener("click", () => {
-  els.modal.style.display = "flex";
-});
-els.closeModalBtn.addEventListener("click", () => {
-  els.modal.style.display = "none";
-});
-window.addEventListener("click", (event) => {
-  if (event.target === els.modal) {
-    els.modal.style.display = "none";
-  }
-});
-els.resetRankBtn.addEventListener("click", () => {
-  void clearLeaderboard();
-});
+els.infoBtn.addEventListener("click", () => els.modal.style.display = "flex");
+els.closeModalBtn.addEventListener("click", () => els.modal.style.display = "none");
+window.addEventListener("click", (event) => { if (event.target === els.modal) els.modal.style.display = "none"; });
+els.resetRankBtn.addEventListener("click", () => void clearLeaderboard());
 
 async function initRealtimeQueue() {
     try {
         const config = await fetch('/api/config').then(res => res.json());
-
-        if (!config.supabase_url || !config.supabase_key) {
-            console.warn("Supabase credentials missing.");
-            return;
-        }
-
+        if (!config.supabase_url || !config.supabase_key) return console.warn("Supabase credentials missing.");
         const _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
 
-        // --- NEW: FETCH EXISTING UNPLAYED SONGS ON LOAD ---
         const { data: existingSongs, error } = await _supabase
             .from('live_queue')
             .select('*')
@@ -699,12 +636,14 @@ async function initRealtimeQueue() {
             existingSongs.forEach(song => {
                 addToQueue({
                     id: song.youtube_id,
+                    db_id: song.id,  // NEW: Grab the Supabase ID
                     title: song.title,
                     requestor: song.singer_name,
                     rhythm_map: []
                 });
             });
         }
+
         _supabase
             .channel('public:live_queue')
             .on('postgres_changes', {
@@ -714,6 +653,7 @@ async function initRealtimeQueue() {
             }, payload => {
                 addToQueue({
                     id: payload.new.youtube_id,
+                    db_id: payload.new.id, // NEW: Grab the Supabase ID
                     title: payload.new.title,
                     requestor: payload.new.singer_name,
                     rhythm_map: []
@@ -721,7 +661,6 @@ async function initRealtimeQueue() {
             })
             .subscribe();
 
-        console.log("Secure Realtime Bridge Active.");
     } catch (err) {
         console.error("Failed to initialize secure bridge:", err);
     }
