@@ -145,10 +145,15 @@ async function submitLeaderboardScore(scoreData) {
 }
 
 async function clearLeaderboard() {
+  if (!confirm("Are you sure you want to clear all scores?")) return;
+
   try {
+    // Upgraded to fetchJson so it catches 500/400 errors
     await fetchJson("/api/leaderboard", { method: "DELETE" });
+    console.log("Leaderboard wiped in Supabase.");
   } catch (error) {
-    console.error("Failed to clear remote leaderboard:", error);
+    console.error("Leaderboard Wipe Error:", error);
+    alert("Backend Error: " + error.message + "\n(Check Vercel Logs or Service Key)");
   }
 
   leaderboardData = [];
@@ -625,9 +630,12 @@ async function clearQueue() {
     saveState();
 
     try {
-        await fetch('/api/live-queue', { method: 'DELETE' });
+        // Upgraded to fetchJson
+        await fetchJson('/api/live-queue', { method: 'DELETE' });
+        console.log("Queue wiped in Supabase.");
     } catch (e) {
-        console.error("Failed to clear remote queue:", e);
+        console.error("Queue Wipe Error:", e);
+        alert("Backend Error: " + e.message + "\n(Check Vercel Logs or Service Key)");
     }
 }
 els.clearQueueBtn.addEventListener("click", clearQueue);
