@@ -53,7 +53,6 @@ Leaderboard System
 
 ⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻
 
-System Architecture
 Frontend (HTML/CSS/JS)
         ↓
 Flask Backend (index.py)
