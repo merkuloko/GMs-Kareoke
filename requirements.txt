@@ -2,3 +2,16 @@ Flask
 requests
 python-dotenv
 flask-cors
+
+# Cross-Origin Resource Sharing (CORS) Support
+#
+# Enables the Flask backend to accept requests from different origins
+# (e.g., mobile client, deployed frontend, or external domains).
+#
+# Responsibilities:
+# - Allows API access from frontend hosted on a different domain/port
+# - Prevents browser CORS policy blocking legitimate requests
+#
+# Notes:
+# - Required for client-server architecture (Flask API + web/mobile UI)
+# - Should be configured carefully in production (restrict allowed origins)

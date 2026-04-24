@@ -2,6 +2,25 @@ const RMS_THRESHOLD = 0.018;
 const SCORE_INCREMENT = 1;
 const SCORE_FORMAT = { minimumIntegerDigits: 6, useGrouping: false };
 
+/**
+ * Clears the entire song queue both locally and in the backend (Supabase).
+ *
+ * Responsibilities:
+ * - Prompts user confirmation to prevent accidental deletion
+ * - Resets the in-memory queue state (songQueue)
+ * - Updates the UI to reflect an empty queue
+ * - Persists the cleared state to localStorage
+ * - Sends a DELETE request to `/api/live-queue` to sync with backend
+ *
+ * Error Handling:
+ * - Logs backend errors to console
+ * - Displays alert if backend deletion fails
+ *
+ * Note:
+ * This ensures consistency between client-side state and the shared
+ * realtime queue stored in Supabase.
+ */
+
 let currentVideoId = "BhSZGUXeY6Q";
 let currentRhythmMap = [];
 let currentSongTitle = "Karaoke Song";

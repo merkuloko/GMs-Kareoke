@@ -1,6 +1,42 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+"""
+Karaoke Web Application Backend (Flask)
+
+This module serves as the main entry point of the Karaoke system. It defines
+all HTTP routes, integrates external services, and manages data flow between
+the frontend and storage layers.
+
+Core Responsibilities:
+- Handle API endpoints for songs, leaderboard, and live queue
+- Integrate with Supabase (primary cloud database) and SQLite (fallback/local)
+- Process YouTube search requests via YouTube Data API
+- Manage mobile queue interactions and QR generation
+- Normalize and validate incoming/outgoing data
+
+Key Features:
+- Dual database support (Supabase + SQLite fallback)
+- RESTful API design for frontend consumption
+- Real-time queue management (via Supabase)
+- Leaderboard tracking and persistence
+- External API integration with timeout handling
+
+This file acts as:
+- Controller layer (Flask routes)
+- Service layer (business logic handling)
+- Data access layer (via helper functions)
+
+Environment Variables Required:
+- SUPABASE_URL
+- SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY
+- YOUTUBE_API_KEY (optional, for search feature)
+- MOBILE_QUEUE_URL (optional, for QR/mobile integration)
+
+Author: GM Mercullo
+Project: GM's Karaoke System
+"""
+
 import json
 import os
 import sqlite3

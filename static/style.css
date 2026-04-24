@@ -1,4 +1,19 @@
-/* static/style.css */
+/*
+ Root Layout Container
+
+ Acts as the primary wrapper for the entire application UI.
+
+ Responsibilities:
+ - Establishes full viewport height layout (min-height: 100vh)
+ - Centers all main content horizontally using flexbox
+ - Stacks child elements vertically (column layout)
+ - Applies global padding for consistent spacing across sections
+ - Maintains relative positioning for layering (z-index control)
+
+ Notes:
+ - Works in conjunction with fixed background elements (e.g., .scanlines)
+ - Serves as the main layout anchor for all visible components
+*/
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {

@@ -1,3 +1,31 @@
+<!--
+    Karaoke Mobile Remote Interface
+
+    This file represents the mobile client interface for the Karaoke system.
+    It allows users to search songs via YouTube, select tracks, and add them
+    to the live singing queue.
+
+    Core Responsibilities:
+    - Provide a mobile-friendly UI for song search and selection
+    - Handle user identity via localStorage (singer name persistence)
+    - Communicate with backend APIs (/api/search, /api/live-queue)
+    - Display search results dynamically
+    - Submit selected songs to the shared queue
+
+    Key Features:
+    - YouTube-based song search integration
+    - Real-time queue participation via API
+    - Persistent user identity (localStorage)
+    - Error handling with user-friendly messages
+
+    Acts as:
+    - Frontend client (mobile interface)
+    - API consumer (Flask backend)
+    - UI layer for queue interaction
+
+    Author: GM Mercullo
+    Project: GM's Karaoke System
+-->
 <!DOCTYPE html>
 <html>
 <head>

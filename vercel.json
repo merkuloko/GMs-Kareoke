@@ -15,9 +15,23 @@
       "src": "/mobile",
       "dest": "api/index.py"
     },
+
     {
       "src": "/(.*)",
       "dest": "api/index.py"
     }
   ]
 }
+
+
+    // Catch-All Route Handler
+    //
+    // Responsibilities:
+    // - Routes all unmatched requests to the Flask backend (index.py)
+    // - Enables server-side handling for frontend paths (SPA-like behavior)
+    // - Acts as a fallback when no other route patterns are matched
+    //
+    // Notes:
+    // - This should always be the LAST route in the list to avoid overriding
+    //   more specific routes (e.g., /api/*, /mobile)
+    // - Ensures consistent request handling through a single entry point
