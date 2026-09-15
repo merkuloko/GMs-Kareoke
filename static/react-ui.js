@@ -226,27 +226,39 @@ function App() {
 
   useEffect(() => {
     async function loadInitialData() {
-      try {
-        const [config, songs, leaderboardData] = await Promise.all([
-          fetchJson('/api/config'),
-          fetchJson('/api/songs'),
-          fetchJson('/api/leaderboard'),
-        ]);
+      const [configResult, songsResult, leaderboardResult] = await Promise.allSettled([
+        fetchJson('/api/config'),
+        fetchJson('/api/songs'),
+        fetchJson('/api/leaderboard'),
+      ]);
 
-        const normalizedSongs = Array.isArray(songs) ? songs.map(normalizeSong) : [];
+      if (songsResult.status === 'fulfilled') {
+        const normalizedSongs = Array.isArray(songsResult.value)
+          ? songsResult.value.map(normalizeSong)
+          : [];
         if (normalizedSongs.length) {
           setCurrentSong(normalizedSongs[0]);
           setSongPickerText(normalizedSongs[0].title);
         }
+      } else {
+        setStatusMessage('Song catalog unavailable. Check the song database configuration.');
+      }
 
-        setLeaderboard(Array.isArray(leaderboardData) ? leaderboardData : []);
+      if (leaderboardResult.status === 'fulfilled') {
+        setLeaderboard(Array.isArray(leaderboardResult.value) ? leaderboardResult.value : []);
+      }
+
+      if (configResult.status === 'fulfilled') {
+        const config = configResult.value;
         setMobileQueueEnabled(Boolean(config && config.mobile_queue_enabled));
         if (config && config.mobile_queue_enabled && config.mobile_queue_url) {
-          const qrResult = await fetchJson('/api/queue-qr');
-          setQrUrl(qrResult && qrResult.url ? qrResult.url : '');
+          try {
+            const qrResult = await fetchJson('/api/queue-qr');
+            setQrUrl(qrResult && qrResult.url ? qrResult.url : '');
+          } catch (error) {
+            setStatusMessage('Mobile queue QR is unavailable.');
+          }
         }
-      } catch (error) {
-        setStatusMessage(error.message || 'Unable to load karaoke data');
       }
     }
 
