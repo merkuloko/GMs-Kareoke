@@ -122,6 +122,16 @@ def require_write_auth(func):
     return wrapper
 
 
+def require_queue_request_auth(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if get_write_secret() and not require_write_secret():
+            return error_response("Unauthorized", 401)
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 def get_json_body(required_fields=None):
     payload = request.get_json(silent=True)
     if payload is None:
@@ -659,7 +669,7 @@ def get_live_queue():
 
 
 @app.route("/api/live-queue", methods=["POST"])
-@require_write_auth
+@require_queue_request_auth
 def add_to_queue():
     try:
         data = get_json_body(["youtube_id", "title", "singer_name"])

@@ -56,7 +56,16 @@ class ApiEndpointTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["message"], "Success")
-        mock_request.assert_called_once()
+        mock_request.assert_called_once_with(
+            "POST",
+            "live_queue",
+            payload={
+                "youtube_id": "abc123",
+                "title": "Take On Me",
+                "singer_name": "Jamie",
+            },
+            prefer="return=minimal",
+        )
 
     def test_mobile_page_auth_cookie_is_available_to_api_routes(self):
         response = self.client.get("/mobile")
@@ -109,6 +118,23 @@ class ApiEndpointTests(unittest.TestCase):
     def test_queue_delete_requires_secret(self):
         response = self.client.delete("/api/live-queue")
         self.assertEqual(response.status_code, 401)
+
+    def test_queue_request_is_public_when_write_secret_is_not_configured(self):
+        original = os.environ.pop("KARAOKE_WRITE_SECRET", None)
+        try:
+            with patch.object(api, "supabase_request", return_value=None):
+                response = self.client.post(
+                    "/api/live-queue",
+                    json={
+                        "youtube_id": "abc123",
+                        "title": "Take On Me",
+                        "singer_name": "Jamie",
+                    },
+                )
+        finally:
+            if original is not None:
+                os.environ["KARAOKE_WRITE_SECRET"] = original
+        self.assertEqual(response.status_code, 200)
 
     def test_queue_delete_success(self):
         with patch.object(api, "supabase_request", return_value=None):
@@ -269,6 +295,11 @@ class ApiEndpointTests(unittest.TestCase):
             with self.subTest(path=path):
                 with self.client.get(path) as response:
                     self.assertEqual(response.status_code, 200)
+
+    def test_mobile_template_uses_song_catalog_search(self):
+        template = (ROOT / "templates" / "mobile.html").read_text()
+        self.assertIn("fetch('/api/songs'", template)
+        self.assertNotIn("fetch(apiUrl)", template)
 
     def test_queue_read_returns_json(self):
         response = self.client.get("/api/live-queue")

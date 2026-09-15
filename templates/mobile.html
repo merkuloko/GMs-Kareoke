@@ -8,7 +8,7 @@
     Core Responsibilities:
     - Provide a mobile-friendly UI for song search and selection
     - Handle user identity via localStorage (singer name persistence)
-    - Communicate with backend APIs (/api/search, /api/live-queue)
+    - Communicate with backend APIs (/api/songs, /api/live-queue)
     - Display search results dynamically
     - Submit selected songs to the shared queue
 
@@ -41,6 +41,7 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
 .result-item img { width: 60px; border-radius: 4px; }
 .user-bar { font-size: 0.9em; color: #888; margin-bottom: 20px; }
 .change-btn { background: none; border: none; color: #4169E1; text-decoration: underline; padding: 0; margin-left: 10px; cursor: pointer; font-family: inherit; }
+.name-input { width: 100%; margin: 8px 0 16px; }
 </style>
 </head>
 <body>
@@ -48,7 +49,7 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
 
 <div class="user-bar">
     Singing as: <span id="singerDisplay" style="color: white; font-weight: bold;">Guest</span>
-    <button class="change-btn" onclick="changeName()">Change</button>
+    <input class="name-input" type="text" id="singerName" maxlength="100" placeholder="Enter your name to request a song">
 </div>
 
 <div class="search-box">
@@ -60,30 +61,23 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
 <script>
     window.onload = () => {
         const savedName = localStorage.getItem('karaoke_name');
-        if (savedName) document.getElementById('singerDisplay').textContent = savedName;
+        if (savedName) {
+            document.getElementById('singerDisplay').textContent = savedName;
+            document.getElementById('singerName').value = savedName;
+        }
     };
 
     function getSingerName() {
-        let name = localStorage.getItem('karaoke_name');
+        const nameInput = document.getElementById('singerName');
+        const name = nameInput.value.trim();
         if (!name) {
-            name = prompt("Enter your name to join the queue:");
-            if (name && name.trim() !== "") {
-                localStorage.setItem('karaoke_name', name.trim());
-                document.getElementById('singerDisplay').textContent = name.trim();
-            } else {
-                return null; // User cancelled
-            }
+            setStatus('Enter your name before requesting a song.', true);
+            nameInput.focus();
+            return null;
         }
+        localStorage.setItem('karaoke_name', name);
+        document.getElementById('singerDisplay').textContent = name;
         return name;
-    }
-
-    function changeName() {
-        const current = localStorage.getItem('karaoke_name') || "";
-        const newName = prompt("Change your name:", current);
-        if (newName && newName.trim() !== "") {
-            localStorage.setItem('karaoke_name', newName.trim());
-            document.getElementById('singerDisplay').textContent = newName.trim();
-        }
     }
     // ----------------------------------
 
@@ -113,19 +107,34 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
         resultsDiv.replaceChildren();
         const loading = document.createElement('div');
         loading.style.color = '#4169E1';
-        loading.textContent = 'Connecting to YouTube...';
+        loading.textContent = 'Loading song catalog...';
         resultsDiv.appendChild(loading);
 
         try {
-            const apiUrl = `/api/search?q=${encodeURIComponent(query)}`;
-            const response = await fetch(apiUrl);
+            const response = await fetch('/api/songs', {
+                credentials: 'same-origin'
+            });
 
             if (!response.ok) {
                 const data = await response.json().catch(() => ({}));
-                throw new Error(data.error || 'Server busy');
+                throw new Error(data.error || 'Song catalog unavailable');
             }
 
-            const data = await response.json();
+            const songs = await response.json();
+            const normalizedQuery = query.toLowerCase();
+            const data = songs
+                .filter((song) => {
+                    const searchable = `${song.title || ''} ${song.artist || ''}`.toLowerCase();
+                    return searchable.includes(normalizedQuery);
+                })
+                .map((song) => ({
+                    id: song.youtube_id || song.id,
+                    title: song.title || 'Untitled song',
+                    thumbnail: song.youtube_id
+                        ? `https://i.ytimg.com/vi/${encodeURIComponent(song.youtube_id)}/mqdefault.jpg`
+                        : ''
+                }))
+                .filter((song) => song.id);
             resultsDiv.replaceChildren();
 
             if (data.length === 0) {
