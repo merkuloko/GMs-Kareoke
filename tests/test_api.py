@@ -175,6 +175,23 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("zero or greater", response.get_json()["error"])
 
+    def test_score_submission_is_public_when_write_secret_is_not_configured(self):
+        original = os.environ.pop("KARAOKE_WRITE_SECRET", None)
+        try:
+            with patch.object(
+                api,
+                "create_leaderboard_entry",
+                return_value={"id": 1, "name": "Jamie", "score": 99},
+            ):
+                response = self.client.post(
+                    "/api/leaderboard",
+                    json={"name": "Jamie", "score": 99, "song_title": "Song"},
+                )
+        finally:
+            if original is not None:
+                os.environ["KARAOKE_WRITE_SECRET"] = original
+        self.assertEqual(response.status_code, 201)
+
     def test_missing_youtube_api_key(self):
         original = api.YOUTUBE_API_KEY
         api.YOUTUBE_API_KEY = ""
