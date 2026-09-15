@@ -71,8 +71,9 @@ def get_mobile_queue_url():
 
     parsed = urlparse(configured_url)
     is_local_target = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    is_vercel_target = parsed.hostname and parsed.hostname.endswith(".vercel.app")
 
-    if configured_url and not is_local_target:
+    if configured_url and not is_local_target and not is_vercel_target:
         if parsed.path in {"", "/"}:
             return f"{configured_url}/mobile"
         return configured_url

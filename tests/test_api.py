@@ -102,6 +102,21 @@ class ApiEndpointTests(unittest.TestCase):
             "https://gms-kareoke.vercel.app/mobile",
         )
 
+    def test_queue_qr_replaces_old_vercel_target_on_current_host(self):
+        original = api.MOBILE_QUEUE_URL
+        api.MOBILE_QUEUE_URL = "https://old-deployment.vercel.app/mobile"
+        try:
+            response = self.client.get(
+                "/api/queue-qr",
+                base_url="https://kareoke-2.vercel.app",
+            )
+        finally:
+            api.MOBILE_QUEUE_URL = original
+        self.assertEqual(
+            response.get_json()["target"],
+            "https://kareoke-2.vercel.app/mobile",
+        )
+
     def test_queue_request_rejects_oversized_fields(self):
         response = self.client.post(
             "/api/live-queue",
