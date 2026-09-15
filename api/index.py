@@ -529,6 +529,24 @@ def get_song_detail(song_id):
     return jsonify(song)
 
 
+def search_catalog(query):
+    normalized_query = query.casefold()
+    results = []
+    for song in fetch_songs():
+        title = str(song.get("title") or "Untitled song")
+        artist = str(song.get("artist") or "")
+        video_id = str(song.get("youtube_id") or "").strip()
+        if video_id and normalized_query in f"{title} {artist}".casefold():
+            results.append(
+                {
+                    "id": video_id,
+                    "title": title,
+                    "thumbnail": f"https://i.ytimg.com/vi/{quote_plus(video_id)}/mqdefault.jpg",
+                }
+            )
+    return results[:5]
+
+
 @app.route("/api/search")
 def search_youtube():
     query = (request.args.get("q") or "").strip()
@@ -536,7 +554,10 @@ def search_youtube():
         return error_response("No query provided", 400)
 
     if not YOUTUBE_API_KEY:
-        return error_response("YouTube search is not configured", 503)
+        try:
+            return jsonify(search_catalog(query))
+        except (RuntimeError, requests.RequestException, sqlite3.Error):
+            return error_response("Song catalog service unavailable", 503)
 
     params = {
         "part": "snippet",

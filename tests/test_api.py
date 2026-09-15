@@ -179,11 +179,22 @@ class ApiEndpointTests(unittest.TestCase):
         original = api.YOUTUBE_API_KEY
         api.YOUTUBE_API_KEY = ""
         try:
-            response = self.client.get("/api/search?q=test")
+            with patch.object(
+                api,
+                "fetch_songs",
+                return_value=[
+                    {
+                        "title": "Test Song",
+                        "artist": "Test Artist",
+                        "youtube_id": "abc123",
+                    }
+                ],
+            ):
+                response = self.client.get("/api/search?q=test")
         finally:
             api.YOUTUBE_API_KEY = original
-        self.assertEqual(response.status_code, 503)
-        self.assertIn("not configured", response.get_json()["error"])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()[0]["id"], "abc123")
 
     def test_database_failure_returns_empty_list(self):
         temp_dir = Path(__file__).resolve().parent
