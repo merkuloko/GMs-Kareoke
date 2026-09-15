@@ -87,6 +87,17 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
     }
     // ----------------------------------
 
+    function setStatus(message, isError = false) {
+        const resultsDiv = document.getElementById('results');
+        if (!resultsDiv) return;
+
+        resultsDiv.innerHTML = '';
+        const status = document.createElement('div');
+        status.style.color = isError ? '#ff4060' : '#00e5b0';
+        status.textContent = message;
+        resultsDiv.appendChild(status);
+    }
+
     function getFriendlyError(error) {
         if (error instanceof TypeError) {
             return "Cannot reach the karaoke server. Check your connection.";
@@ -99,7 +110,11 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
         const resultsDiv = document.getElementById('results');
         if (!query) return;
 
-        resultsDiv.innerHTML = '<div style="color:#4169E1">Connecting to YouTube... </div>';
+        resultsDiv.replaceChildren();
+        const loading = document.createElement('div');
+        loading.style.color = '#4169E1';
+        loading.textContent = 'Connecting to YouTube...';
+        resultsDiv.appendChild(loading);
 
         try {
             const apiUrl = `/api/search?q=${encodeURIComponent(query)}`;
@@ -111,10 +126,13 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
             }
 
             const data = await response.json();
-            resultsDiv.innerHTML = ''; 
+            resultsDiv.replaceChildren();
 
             if (data.length === 0) {
-                resultsDiv.innerHTML = '<div style="color:#888">No songs found.</div>';
+                const empty = document.createElement('div');
+                empty.style.color = '#888';
+                empty.textContent = 'No songs found.';
+                resultsDiv.appendChild(empty);
                 return;
             }
 
@@ -124,10 +142,11 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
                 div.onclick = () => addToQueue(video.id, video.title);
 
                 const img = document.createElement('img');
-                img.src = video.thumbnail;
+                img.src = video.thumbnail || '';
+                img.alt = video.title || 'Song thumbnail';
 
                 const titleDiv = document.createElement('div');
-                titleDiv.textContent = video.title; 
+                titleDiv.textContent = video.title || 'Untitled song';
 
                 div.appendChild(img);
                 div.appendChild(titleDiv);
@@ -135,7 +154,7 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
             });
         } catch (e) {
             console.error("Search Error:", e);
-            resultsDiv.innerHTML = `<div style="color:#ff4060">${getFriendlyError(e)}</div>`;
+            setStatus(getFriendlyError(e), true);
         }
     }
 
@@ -159,11 +178,11 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
                 throw new Error(data.error || 'Failed to add to queue');
             }
 
-            alert("Added to queue!");
-            document.getElementById('results').innerHTML = '';
+            setStatus('Added to queue!');
+            document.getElementById('results').replaceChildren();
             document.getElementById('songQuery').value = '';
         } catch (error) {
-            alert("Error: " + getFriendlyError(error));
+            setStatus('Error: ' + getFriendlyError(error), true);
         }
     }
 </script>

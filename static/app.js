@@ -44,6 +44,7 @@ let micActive = false;
 let isSinging = false;
 let score = 0;
 let duration = 0;
+let scoringEnabled = true;
 
 const els = {
   loader: document.getElementById("player-loader"),
@@ -54,6 +55,7 @@ const els = {
   micBtn: document.getElementById("mic-btn"),
   resetBtn: document.getElementById("reset-btn"),
   nextBtn: document.getElementById("next-btn"),
+  scoreToggleBtn: document.getElementById("score-toggle-btn"),
   micDot: document.getElementById("mic-dot"),
   micLabel: document.getElementById("mic-label"),
   singPill: document.getElementById("sing-pill"),
@@ -85,6 +87,23 @@ function formatScore(value) {
 function showError(message) {
   els.errorMsg.textContent = message;
   els.errorMsg.style.display = message ? "block" : "none";
+  els.errorMsg.style.color = message ? "#ff4060" : "";
+}
+
+function notifyUser(message, mode = "error") {
+  if (!message) {
+    clearError();
+    return;
+  }
+
+  els.errorMsg.textContent = message;
+  els.errorMsg.style.display = "block";
+  els.errorMsg.style.color = mode === "success" ? "#00e5b0" : "#ff4060";
+  window.clearTimeout(notifyUser.timerId);
+  notifyUser.timerId = window.setTimeout(() => {
+    els.errorMsg.style.display = "none";
+    els.errorMsg.textContent = "";
+  }, 3200);
 }
 
 function clearError() {
@@ -167,12 +186,10 @@ async function clearLeaderboard() {
   if (!confirm("Are you sure you want to clear all scores?")) return;
 
   try {
-    // Upgraded to fetchJson so it catches 500/400 errors
     await fetchJson("/api/leaderboard", { method: "DELETE" });
-    console.log("Leaderboard wiped in Supabase.");
   } catch (error) {
     console.error("Leaderboard Wipe Error:", error);
-    alert("Backend Error: " + error.message + "\n(Check Vercel Logs or Service Key)");
+    notifyUser("Backend Error: " + error.message, "error");
   }
 
   leaderboardData = [];
@@ -276,19 +293,30 @@ function renderSearchResult(video) {
   return item;
 }
 
+async function setEmptyState(container, message, color = "#555") {
+  const state = document.createElement("div");
+  state.style.fontSize = "12px";
+  state.style.color = color;
+  state.textContent = message;
+  container.replaceChildren(state);
+}
+
 async function searchYouTube() {
   const query = els.searchInput.value.trim();
   if (!query) return;
   clearError();
-  els.searchResults.innerHTML = '<div style="font-size:12px; color:#555;">Searching...</div>';
+  setEmptyState(els.searchResults, "Searching...", "#555");
 
   try {
     const results = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
-    els.searchResults.innerHTML = "";
-    if (results.length === 0) return els.searchResults.innerHTML = '<div style="font-size:12px; color:#555;">No results found</div>';
+    els.searchResults.replaceChildren();
+    if (results.length === 0) {
+      setEmptyState(els.searchResults, "No results found", "#555");
+      return;
+    }
     results.forEach((video) => els.searchResults.appendChild(renderSearchResult(video)));
   } catch (error) {
-    els.searchResults.innerHTML = '<div style="color:red">Search failed</div>';
+    setEmptyState(els.searchResults, "Search failed", "#ff4060");
     showError(error.message);
   }
 }
@@ -345,8 +373,15 @@ function playNextInQueue() {
 }
 
 function updateQueueUI() {
-  els.queueList.innerHTML = "";
-  if (songQueue.length === 0) return els.queueList.innerHTML = '<div style="font-size: 12px; color: #555;">Queue is empty</div>';
+  els.queueList.replaceChildren();
+  if (songQueue.length === 0) {
+    const emptyState = document.createElement("div");
+    emptyState.style.fontSize = "12px";
+    emptyState.style.color = "#555";
+    emptyState.textContent = "Queue is empty";
+    els.queueList.appendChild(emptyState);
+    return;
+  }
 
   songQueue.forEach((song, index) => {
     const div = document.createElement("div");
@@ -357,16 +392,32 @@ function updateQueueUI() {
     div.style.marginBottom = "5px";
     div.style.color = "#eee";
 
-    const singer = song.requestor ? ` <span style="color:#00e5b0">[${song.requestor}]</span>` : "";
-    div.innerHTML = `${index + 1}. ${song.title}${singer}`;
+    const prefix = document.createElement("span");
+    prefix.textContent = `${index + 1}. ${song.title}`;
+    div.appendChild(prefix);
+
+    if (song.requestor) {
+      const singerLabel = document.createElement("span");
+      singerLabel.style.color = "#00e5b0";
+      singerLabel.textContent = ` [${song.requestor}]`;
+      div.appendChild(singerLabel);
+    }
+
     els.queueList.appendChild(div);
   });
 }
 
 function updateRhythmUI() {
-  els.legendGrid.innerHTML = "";
+  els.legendGrid.replaceChildren();
   if (currentRhythmMap.length === 0) {
-    els.legendGrid.innerHTML = '<div style="color:#00e5b0; border: 1px solid #00e5b044; padding: 10px; background: #00e5b011; border-radius: 4px;">Free-for-All Mode</div>';
+    const freeMode = document.createElement("div");
+    freeMode.style.color = "#00e5b0";
+    freeMode.style.border = "1px solid #00e5b044";
+    freeMode.style.padding = "10px";
+    freeMode.style.background = "#00e5b011";
+    freeMode.style.borderRadius = "4px";
+    freeMode.textContent = "Free-for-All Mode";
+    els.legendGrid.appendChild(freeMode);
     buildTimelineZones();
     return;
   }
@@ -422,15 +473,10 @@ window.onYouTubeIframeAPIReady = function onYouTubeIframeAPIReady() {
         }
 
         if (event.data === YT.PlayerState.ENDED) {
-          if (score > 0) {
-            let singerName = currentSinger;
+          if (scoringEnabled && score > 0) {
+            let singerName = currentSinger || (window.prompt ? window.prompt(`Great job! Your score was ${score}.\nEnter your name for the leaderboard:`) : "") || "Anonymous Singer";
 
-            // NEW: If we know the singer, skip the prompt!
-            if (singerName) {
-                alert(`Great job ${singerName}! Your score was ${score}.`);
-            } else {
-                singerName = prompt(`Great job! Your score was ${score}.\nEnter your name for the leaderboard:`) || "Anonymous Singer";
-            }
+            notifyUser(`Great job ${singerName.trim() || "Anonymous Singer"}! Your score was ${score}.`, "success");
 
             singerName = singerName.trim() || "Anonymous Singer";
 
@@ -456,7 +502,7 @@ window.onYouTubeIframeAPIReady = function onYouTubeIframeAPIReady() {
 
 function buildTimelineZones() {
   if (!duration) return;
-  els.beatZonesContainer.innerHTML = "";
+  els.beatZonesContainer.replaceChildren();
   currentRhythmMap.forEach((zone, index) => {
     const div = document.createElement("div");
     div.className = "beat-zone";
@@ -495,7 +541,7 @@ function startLoop() {
       if (zoneEl) zoneEl.classList.toggle("current", inZone);
     });
 
-    if (onBeat && isSinging) {
+    if (scoringEnabled && onBeat && isSinging) {
       score += SCORE_INCREMENT;
       els.scoreValue.innerText = formatScore(score);
       saveState();
@@ -526,9 +572,26 @@ function updateVUUI(rms) {
 }
 
 function updateHint() {
+  if (!scoringEnabled) return els.scoreHint.innerText = "Scoring is off. Enjoy the music.";
   if (!micActive) return els.scoreHint.innerText = "Enable mic to start scoring";
   if (!isPlaying) return els.scoreHint.innerText = "Press play to begin";
   els.scoreHint.innerText = isSinging ? "Keep singing!" : (currentRhythmMap.length === 0 ? "Sing anytime!" : "Sing on the teal zones");
+}
+
+function toggleScoring() {
+  scoringEnabled = !scoringEnabled;
+  els.scoreToggleBtn.textContent = scoringEnabled ? "SCORING ON" : "SCORING OFF";
+  els.scoreToggleBtn.classList.toggle("btn-toggle-off", !scoringEnabled);
+  if (!scoringEnabled) {
+    score = 0;
+    els.scoreValue.innerText = formatScore(score);
+    saveState();
+    if (isPlaying && micActive) {
+      isSinging = false;
+      updateSingingUI();
+    }
+  }
+  updateHint();
 }
 
 async function toggleMic() {
@@ -568,8 +631,15 @@ async function toggleMic() {
 }
 
 function updateLeaderboardUI() {
-  els.rankList.innerHTML = "";
-  if (leaderboardData.length === 0) return els.rankList.innerHTML = '<div style="font-size: 12px; color: #555;">No scores yet</div>';
+  els.rankList.replaceChildren();
+  if (leaderboardData.length === 0) {
+    const emptyState = document.createElement("div");
+    emptyState.style.fontSize = "12px";
+    emptyState.style.color = "#555";
+    emptyState.textContent = "No scores yet";
+    els.rankList.appendChild(emptyState);
+    return;
+  }
 
   leaderboardData.sort((a, b) => b.score - a.score);
   leaderboardData.slice(0, 5).forEach((entry, index) => {
@@ -621,11 +691,12 @@ els.songSelect.addEventListener("change", async (event) => {
 
 els.searchBtn.addEventListener("click", searchYouTube);
 els.searchInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); searchYouTube(); } });
+els.scoreToggleBtn.addEventListener("click", toggleScoring);
 els.micBtn.addEventListener("click", toggleMic);
 els.resetBtn.addEventListener("click", () => { resetScore(); clearError(); });
 els.nextBtn.addEventListener("click", () => {
   cancelAnimationFrame(rafId);
-  els.beatZonesContainer.innerHTML = "";
+els.beatZonesContainer.replaceChildren();
   els.timelineProgress.style.width = "0%";
   if (songQueue.length > 0) {
     playNextInQueue();
@@ -649,12 +720,10 @@ async function clearQueue() {
     saveState();
 
     try {
-        // Upgraded to fetchJson
         await fetchJson('/api/live-queue', { method: 'DELETE' });
-        console.log("Queue wiped in Supabase.");
     } catch (e) {
         console.error("Queue Wipe Error:", e);
-        alert("Backend Error: " + e.message + "\n(Check Vercel Logs or Service Key)");
+        notifyUser("Backend Error: " + e.message, "error");
     }
 }
 els.clearQueueBtn.addEventListener("click", clearQueue);
@@ -668,9 +737,14 @@ els.resetRankBtn.addEventListener("click", () => void clearLeaderboard());
 
 async function initRealtimeQueue() {
     try {
-        const config = await fetch('/api/config').then(res => res.json());
+        if (!window.supabase || typeof window.supabase.createClient !== "function") {
+            console.warn("Supabase client library not loaded; realtime queue disabled.");
+            return;
+        }
+
+        const config = await fetch('/api/config').then((res) => res.json());
         if (!config.supabase_url || !config.supabase_key) return console.warn("Supabase credentials missing.");
-        const _supabase = supabase.createClient(config.supabase_url, config.supabase_key);
+        const _supabase = window.supabase.createClient(config.supabase_url, config.supabase_key);
 
         const { data: existingSongs, error } = await _supabase
             .from('live_queue')
@@ -679,10 +753,10 @@ async function initRealtimeQueue() {
             .order('created_at', { ascending: true });
 
         if (!error && existingSongs) {
-            existingSongs.forEach(song => {
+            existingSongs.forEach((song) => {
                 addToQueue({
                     id: song.youtube_id,
-                    db_id: song.id,  // NEW: Grab the Supabase ID
+                    db_id: song.id,
                     title: song.title,
                     requestor: song.singer_name,
                     rhythm_map: []
@@ -696,10 +770,10 @@ async function initRealtimeQueue() {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'live_queue'
-            }, payload => {
+            }, (payload) => {
                 addToQueue({
                     id: payload.new.youtube_id,
-                    db_id: payload.new.id, // NEW: Grab the Supabase ID
+                    db_id: payload.new.id,
                     title: payload.new.title,
                     requestor: payload.new.singer_name,
                     rhythm_map: []

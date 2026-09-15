@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+
 load_dotenv()
 
 """
@@ -14,32 +15,14 @@ Core Responsibilities:
 - Process YouTube search requests via YouTube Data API
 - Manage mobile queue interactions and QR generation
 - Normalize and validate incoming/outgoing data
-
-Key Features:
-- Dual database support (Supabase + SQLite fallback)
-- RESTful API design for frontend consumption
-- Real-time queue management (via Supabase)
-- Leaderboard tracking and persistence
-- External API integration with timeout handling
-
-This file acts as:
-- Controller layer (Flask routes)
-- Service layer (business logic handling)
-- Data access layer (via helper functions)
-
-Environment Variables Required:
-- SUPABASE_URL
-- SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY
-- YOUTUBE_API_KEY (optional, for search feature)
-- MOBILE_QUEUE_URL (optional, for QR/mobile integration)
-
-Author: GM Mercullo
-Project: GM's Karaoke System
 """
 
+import hashlib
 import json
 import os
+import secrets
 import sqlite3
+from functools import wraps
 from urllib.parse import quote_plus
 
 import requests
@@ -50,11 +33,23 @@ from flask_cors import CORS
 current_dir = os.path.dirname(os.path.abspath(__file__))
 base_dir = os.path.dirname(current_dir)
 
+
+def is_debug_enabled():
+    return os.environ.get("FLASK_DEBUG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 app = Flask(
     __name__,
     template_folder=os.path.join(base_dir, "templates"),
     static_folder=os.path.join(base_dir, "static"),
 )
+app.config["DEBUG"] = is_debug_enabled()
+app.config["JSON_SORT_KEYS"] = False
 CORS(app)
 
 HTTP_TIMEOUT_SECONDS = 10
@@ -65,6 +60,61 @@ SUPABASE_LEADERBOARD_TABLE = os.environ.get(
 )
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()
 MOBILE_QUEUE_URL = os.environ.get("MOBILE_QUEUE_URL", "").strip()
+
+
+def error_response(message, status=400, **extra):
+    payload = {"error": message}
+    payload.update(extra)
+    return jsonify(payload), status
+
+
+def get_write_secret():
+    return os.environ.get("KARAOKE_WRITE_SECRET", "").strip()
+
+
+def get_write_cookie_value():
+    secret = get_write_secret()
+    if not secret:
+        return ""
+    return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def require_write_secret():
+    expected_secret = get_write_secret()
+    if not expected_secret:
+        return False
+
+    provided_header = request.headers.get("X-Karaoke-Secret", "").strip()
+    if secrets.compare_digest(provided_header, expected_secret):
+        return True
+
+    provided_cookie = request.cookies.get("karaoke_write_token", "").strip()
+    return secrets.compare_digest(provided_cookie, get_write_cookie_value())
+
+
+def require_write_auth(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not require_write_secret():
+            return error_response("Unauthorized", 401)
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def get_json_body(required_fields=None):
+    payload = request.get_json(silent=True)
+    if payload is None:
+        raise ValueError("Request body must be valid JSON")
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be a JSON object")
+
+    if required_fields:
+        for field in required_fields:
+            value = payload.get(field)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                raise ValueError(f"Missing or empty field: {field}")
+    return payload
 
 
 def resolve_db_path():
@@ -91,6 +141,9 @@ def get_db_connection():
 
 
 def normalize_song(song):
+    if song is None:
+        return {}
+
     normalized = dict(song)
     rhythm_map = normalized.get("rhythm_map")
 
@@ -107,12 +160,10 @@ def normalize_song(song):
 
 def get_supabase_credentials():
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    print(f"DEBUG: Current URL is: {url}")
-
     key = (
-            os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-            or os.environ.get("SUPABASE_ANON_KEY", "").strip()
-            or os.environ.get("SUPABASE_KEY", "").strip()
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        or os.environ.get("SUPABASE_ANON_KEY", "").strip()
+        or os.environ.get("SUPABASE_KEY", "").strip()
     )
 
     if bool(url) != bool(key):
@@ -175,13 +226,16 @@ def supabase_request(method, path, query_string="", payload=None, prefer=None):
 
 
 def fetch_songs():
-    if is_supabase_enabled():
-        data = supabase_request(
-            "GET",
-            SUPABASE_TABLE,
-            "select=id,title,artist,youtube_id,rhythm_map&order=title.asc",
-        )
-        return [normalize_song(song) for song in data]
+    try:
+        if is_supabase_enabled():
+            data = supabase_request(
+                "GET",
+                SUPABASE_TABLE,
+                "select=id,title,artist,youtube_id,rhythm_map&order=title.asc",
+            )
+            return [normalize_song(song) for song in data or []]
+    except (RuntimeError, requests.RequestException):
+        pass
 
     conn = get_db_connection()
     if conn is None:
@@ -195,10 +249,13 @@ def fetch_songs():
 
 
 def fetch_song_by_id(song_id):
-    if is_supabase_enabled():
-        query = f"select=*&id=eq.{song_id}&limit=1"
-        data = supabase_request("GET", SUPABASE_TABLE, query)
-        return normalize_song(data[0]) if data else None
+    try:
+        if is_supabase_enabled():
+            query = f"select=*&id=eq.{song_id}&limit=1"
+            data = supabase_request("GET", SUPABASE_TABLE, query)
+            return normalize_song(data[0]) if data else None
+    except (RuntimeError, requests.RequestException):
+        pass
 
     conn = get_db_connection()
     if conn is None:
@@ -210,32 +267,35 @@ def fetch_song_by_id(song_id):
 
 
 def fetch_leaderboard():
-    if not is_supabase_enabled():
+    try:
+        if not is_supabase_enabled():
+            return []
+
+        data = supabase_request(
+            "GET",
+            SUPABASE_LEADERBOARD_TABLE,
+            "select=id,singer_name,score,song_title,created_at"
+            "&order=score.desc,created_at.asc"
+            "&limit=5",
+        )
+
+        return [
+            {
+                "id": entry["id"],
+                "name": entry.get("singer_name", "Anonymous Singer"),
+                "score": entry.get("score", 0),
+                "song_title": entry.get("song_title", ""),
+                "created_at": entry.get("created_at"),
+            }
+            for entry in data or []
+        ]
+    except (RuntimeError, requests.RequestException):
         return []
-
-    data = supabase_request(
-        "GET",
-        SUPABASE_LEADERBOARD_TABLE,
-        "select=id,singer_name,score,song_title,created_at"
-        "&order=score.desc,created_at.asc"
-        "&limit=5",
-    )
-
-    return [
-        {
-            "id": entry["id"],
-            "name": entry.get("singer_name", "Anonymous Singer"),
-            "score": entry.get("score", 0),
-            "song_title": entry.get("song_title", ""),
-            "created_at": entry.get("created_at"),
-        }
-        for entry in data or []
-    ]
 
 
 def create_leaderboard_entry(payload):
-    if not is_supabase_enabled():
-        raise RuntimeError("Supabase is not configured")
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be a JSON object")
 
     singer_name = (payload.get("name") or "").strip()[:15] or "Anonymous Singer"
     score = payload.get("score", 0)
@@ -248,6 +308,9 @@ def create_leaderboard_entry(payload):
 
     if score < 0:
         raise ValueError("Score must be zero or greater")
+
+    if not is_supabase_enabled():
+        raise RuntimeError("Supabase is not configured")
 
     data = supabase_request(
         "POST",
@@ -272,54 +335,87 @@ def clear_leaderboard():
     if not is_supabase_enabled():
         return None
 
-    return supabase_request(
-        "DELETE",
-        SUPABASE_LEADERBOARD_TABLE,
-        "id=gt.0",
-        prefer="return=minimal",
-    )
+    try:
+        return supabase_request(
+            "DELETE",
+            SUPABASE_LEADERBOARD_TABLE,
+            "id=gt.0",
+            prefer="return=minimal",
+        )
+    except (RuntimeError, requests.RequestException):
+        return None
 
 
 @app.route("/")
 def home():
-    return render_template(
-        "index.html",
-        mobile_queue_url=MOBILE_QUEUE_URL,
-        mobile_queue_enabled=bool(MOBILE_QUEUE_URL),
+    response = app.make_response(
+        render_template(
+            "index.html",
+            mobile_queue_url=MOBILE_QUEUE_URL,
+            mobile_queue_enabled=bool(MOBILE_QUEUE_URL),
+        )
     )
+    if get_write_secret():
+        response.set_cookie(
+            "karaoke_write_token",
+            get_write_cookie_value(),
+            httponly=True,
+            samesite="Lax",
+            secure=not app.config["DEBUG"],
+        )
+    return response
+
 
 @app.route("/api/live-queue/<item_id>", methods=["PATCH"])
+@require_write_auth
 def mark_queue_played(item_id):
     try:
-        # This tells Supabase to change is_played to TRUE
+        item_id = int(item_id)
+    except (TypeError, ValueError):
+        return error_response("Invalid queue item id", 400)
+
+    try:
         supabase_request(
             "PATCH",
             "live_queue",
             query_string=f"id=eq.{item_id}",
-            payload={"is_played": True}
+            payload={"is_played": True},
         )
         return jsonify({"message": "Success"}), 200
-    except Exception as e:
-        print(f"Error marking played: {e}")
-        return jsonify({"error": str(e)}), 500
+    except RuntimeError as exc:
+        return error_response(str(exc), 503)
+    except requests.RequestException:
+        return error_response("Queue service unavailable", 503)
+    except Exception as exc:
+        return error_response(f"Unable to mark queue item as played: {exc}", 500)
+
 
 @app.route("/mobile")
 def mobile_queue():
-    return render_template("mobile.html")
+    response = app.make_response(render_template("mobile.html"))
+    if get_write_secret():
+        response.set_cookie(
+            "karaoke_write_token",
+            get_write_cookie_value(),
+            httponly=True,
+            samesite="Lax",
+            secure=not app.config["DEBUG"],
+        )
+    return response
 
 
 @app.route("/api/config")
 def get_config():
-    supabase_url = os.environ.get("SUPABASE_URL", "")
-    supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY", "")
-
-    return jsonify({
-        "supabase_url": supabase_url,
-        "supabase_key": supabase_anon_key,
-        "mobile_queue_url": MOBILE_QUEUE_URL,
-        "mobile_queue_enabled": bool(MOBILE_QUEUE_URL),
-        "songs_backend": "supabase" if is_supabase_enabled() else "sqlite"
-    })
+    return jsonify(
+        {
+            "supabase_enabled": is_supabase_enabled(),
+            "mobile_queue_url": MOBILE_QUEUE_URL,
+            "mobile_queue_enabled": bool(MOBILE_QUEUE_URL),
+            "songs_backend": "supabase" if is_supabase_enabled() else "sqlite",
+            "youtube_configured": bool(YOUTUBE_API_KEY),
+            "write_auth_required": bool(get_write_secret()),
+        }
+    )
 
 
 @app.route("/api/songs")
@@ -327,9 +423,9 @@ def get_songs():
     try:
         songs = fetch_songs()
     except RuntimeError as error:
-        return jsonify({"error": str(error)}), 500
+        return error_response(str(error), 500)
     except requests.RequestException:
-        return jsonify({"error": "Song service unavailable"}), 502
+        return error_response("Song service unavailable", 502)
 
     return jsonify(
         [
@@ -350,12 +446,12 @@ def get_song_detail(song_id):
     try:
         song = fetch_song_by_id(song_id)
     except RuntimeError as error:
-        return jsonify({"error": str(error)}), 500
+        return error_response(str(error), 500)
     except requests.RequestException:
-        return jsonify({"error": "Song service unavailable"}), 502
+        return error_response("Song service unavailable", 502)
 
     if song is None:
-        return jsonify({"error": "Song not found"}), 404
+        return error_response("Song not found", 404)
 
     return jsonify(song)
 
@@ -364,10 +460,10 @@ def get_song_detail(song_id):
 def search_youtube():
     query = (request.args.get("q") or "").strip()
     if not query:
-        return jsonify({"error": "No query provided"}), 400
+        return error_response("No query provided", 400)
 
     if not YOUTUBE_API_KEY:
-        return jsonify({"error": "YouTube search is not configured"}), 503
+        return error_response("YouTube search is not configured", 503)
 
     params = {
         "part": "snippet",
@@ -385,7 +481,7 @@ def search_youtube():
         )
         response.raise_for_status()
     except requests.RequestException:
-        return jsonify({"error": "YouTube API failed"}), 502
+        return error_response("YouTube API failed", 502)
 
     data = response.json()
     results = []
@@ -408,40 +504,45 @@ def search_youtube():
     return jsonify(results)
 
 
-# 1. ONLY use GET for fetching the leaderboard
 @app.route("/api/leaderboard", methods=["GET"])
 def get_leaderboard():
     try:
         return jsonify(fetch_leaderboard())
     except RuntimeError as error:
-        return jsonify({"error": str(error)}), 500
+        return error_response(str(error), 500)
     except requests.RequestException:
-        return jsonify({"error": "Leaderboard service unavailable"}), 502
+        return error_response("Leaderboard service unavailable", 502)
 
-# 2. ONLY use POST for saving the score
+
 @app.route("/api/leaderboard", methods=["POST"])
+@require_write_auth
 def save_score():
-    data = request.get_json(silent=True) or {}
+    try:
+        data = get_json_body()
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+
     try:
         entry = create_leaderboard_entry(data)
     except ValueError as error:
-        return jsonify({"error": str(error)}), 400
+        return error_response(str(error), 400)
     except RuntimeError as error:
-        return jsonify({"error": str(error)}), 500
+        return error_response(str(error), 500)
     except requests.RequestException:
-        return jsonify({"error": "Leaderboard service unavailable"}), 502
+        return error_response("Leaderboard service unavailable", 502)
 
     return jsonify(entry), 201
 
 
 @app.route("/api/leaderboard", methods=["DELETE"])
+@require_write_auth
 def delete_leaderboard():
     try:
         clear_leaderboard()
     except RuntimeError as error:
-        return jsonify({"error": str(error)}), 500
+        return error_response(str(error), 500)
     except requests.RequestException:
-        return jsonify({"error": "Leaderboard service unavailable"}), 502
+        return error_response("Leaderboard service unavailable", 502)
 
     return jsonify({"status": "cleared"})
 
@@ -449,7 +550,7 @@ def delete_leaderboard():
 @app.route("/api/queue-qr")
 def queue_qr():
     if not MOBILE_QUEUE_URL:
-        return jsonify({"error": "Mobile queue URL not configured"}), 404
+        return error_response("Mobile queue URL not configured", 404)
 
     qr_url = (
         "https://api.qrserver.com/v1/create-qr-code/"
@@ -459,51 +560,58 @@ def queue_qr():
 
 
 @app.route("/api/live-queue", methods=["POST"])
+@require_write_auth
 def add_to_queue():
-    data = request.json
-    video_id = data.get("youtube_id")
-    title = data.get("title")
-    singer_name = data.get("singer_name")
+    try:
+        data = get_json_body(["youtube_id", "title", "singer_name"])
+    except ValueError as exc:
+        return error_response(str(exc), 400)
 
-    if not all([video_id, title, singer_name]):
-        return jsonify({"error": "Missing song details"}), 400
+    video_id = str(data["youtube_id"]).strip()
+    title = str(data["title"]).strip()
+    singer_name = str(data["singer_name"]).strip()
+
+    if not video_id or not title or not singer_name:
+        return error_response("Missing song details", 400)
 
     try:
-        # Use your existing helper function instead of the 'supabase' variable
         supabase_request(
             "POST",
-            "live_queue",  # The table name
+            "live_queue",
             payload={
                 "youtube_id": video_id,
                 "title": title,
-                "singer_name": singer_name
+                "singer_name": singer_name,
             },
-            prefer="return=minimal"
+            prefer="return=minimal",
         )
-
         return jsonify({"message": "Success"}), 200
-    except Exception as e:
-        print(f"Error adding to queue: {e}")
-        return jsonify({"error": str(e)}), 500
+    except RuntimeError as exc:
+        return error_response(str(exc), 503)
+    except requests.RequestException:
+        return error_response("Queue service unavailable", 503)
+    except Exception as exc:
+        return error_response(f"Unable to add song to queue: {exc}", 500)
+
 
 @app.route("/api/live-queue", methods=["DELETE"])
+@require_write_auth
 def clear_live_queue():
     try:
-        # Deletes all songs currently in the live_queue table
         supabase_request(
             "DELETE",
             "live_queue",
             query_string="id=gt.0",
-            prefer="return=minimal"
+            prefer="return=minimal",
         )
         return jsonify({"message": "Queue cleared"}), 200
-    except Exception as e:
-        print(f"Error clearing queue: {e}")
-        return jsonify({"error": str(e)}), 500
+    except RuntimeError as exc:
+        return error_response(str(exc), 503)
+    except requests.RequestException:
+        return error_response("Queue service unavailable", 503)
+    except Exception as exc:
+        return error_response(f"Unable to clear queue: {exc}", 500)
 
-@app.route("/mobile")
-def mobile_remote():
-    return render_template("mobile.html")
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=app.config["DEBUG"])
