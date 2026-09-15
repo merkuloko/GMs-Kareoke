@@ -19,6 +19,7 @@ Core Responsibilities:
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -26,12 +27,13 @@ from functools import wraps
 from urllib.parse import quote_plus
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_cors import CORS
 
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 base_dir = os.path.dirname(current_dir)
+logger = logging.getLogger(__name__)
 
 
 def is_debug_enabled():
@@ -141,7 +143,7 @@ def get_db_connection():
 
 
 def normalize_song(song):
-    if song is None:
+    if not isinstance(song, dict):
         return {}
 
     normalized = dict(song)
@@ -220,31 +222,62 @@ def supabase_request(method, path, query_string="", payload=None, prefer=None):
 
     content_type = response.headers.get("Content-Type", "")
     if "application/json" in content_type:
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as error:
+            raise RuntimeError("Supabase returned an invalid response") from error
 
     return None
 
 
 def fetch_songs():
+    supabase_configured = any(
+        os.environ.get(name, "").strip()
+        for name in (
+            "SUPABASE_URL",
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "SUPABASE_ANON_KEY",
+            "SUPABASE_KEY",
+        )
+    )
     try:
-        if is_supabase_enabled():
+        credentials = get_supabase_credentials()
+        supabase_configured = credentials is not None or supabase_configured
+        if supabase_configured:
             data = supabase_request(
                 "GET",
                 SUPABASE_TABLE,
                 "select=id,title,artist,youtube_id,rhythm_map&order=title.asc",
             )
-            return [normalize_song(song) for song in data or []]
-    except (RuntimeError, requests.RequestException):
-        pass
+            return [normalize_song(song) for song in data or [] if isinstance(song, dict)]
+    except (RuntimeError, requests.RequestException) as error:
+        logger.warning("Song catalog request failed; trying local fallback: %s", error)
 
-    conn = get_db_connection()
-    if conn is None:
+    try:
+        conn = get_db_connection()
+    except sqlite3.Error as error:
+        logger.warning("Local song database could not be opened: %s", error)
+        if supabase_configured:
+            raise RuntimeError("Song catalog service unavailable") from error
         return []
 
-    songs = conn.execute(
-        "SELECT id, title, artist, youtube_id, rhythm_map FROM songs ORDER BY title ASC"
-    ).fetchall()
-    conn.close()
+    if conn is None:
+        if supabase_configured:
+            raise RuntimeError("Song catalog service unavailable")
+        return []
+
+    try:
+        songs = conn.execute(
+            "SELECT id, title, artist, youtube_id, rhythm_map FROM songs ORDER BY title ASC"
+        ).fetchall()
+    except sqlite3.Error as error:
+        logger.warning("Local song database query failed: %s", error)
+        if supabase_configured:
+            raise RuntimeError("Song catalog service unavailable") from error
+        return []
+    finally:
+        conn.close()
+
     return [normalize_song(dict(row)) for row in songs]
 
 
@@ -366,6 +399,13 @@ def home():
     return response
 
 
+@app.route("/favicon.ico")
+@app.route("/apple-touch-icon.png")
+@app.route("/apple-touch-icon-precomposed.png")
+def app_icon():
+    return send_from_directory(app.static_folder, "standby.png", mimetype="image/png")
+
+
 @app.route("/api/live-queue/<item_id>", methods=["PATCH"])
 @require_write_auth
 def mark_queue_played(item_id):
@@ -422,17 +462,19 @@ def get_config():
 def get_songs():
     try:
         songs = fetch_songs()
-    except RuntimeError as error:
-        return error_response(str(error), 500)
+    except RuntimeError:
+        return error_response("Song catalog service unavailable", 503)
     except requests.RequestException:
-        return error_response("Song service unavailable", 502)
+        return error_response("Song catalog service unavailable", 503)
+    except sqlite3.Error:
+        return error_response("Song catalog service unavailable", 503)
 
     return jsonify(
         [
             {
-                "id": song["id"],
-                "title": song["title"],
-                "artist": song["artist"],
+                "id": song.get("id"),
+                "title": song.get("title", "Untitled song"),
+                "artist": song.get("artist", ""),
                 "youtube_id": song.get("youtube_id"),
                 "rhythm_map": song.get("rhythm_map", []),
             }
@@ -483,7 +525,15 @@ def search_youtube():
     except requests.RequestException:
         return error_response("YouTube API failed", 502)
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError:
+        logger.warning("YouTube search returned malformed JSON with status %s", response.status_code)
+        return error_response("YouTube API returned an invalid response", 502)
+
+    if not isinstance(data, dict):
+        return error_response("YouTube API returned an invalid response", 502)
+
     results = []
     for item in data.get("items", []):
         video_id = item.get("id", {}).get("videoId")
@@ -557,6 +607,33 @@ def queue_qr():
         f"?size=110x110&data={quote_plus(MOBILE_QUEUE_URL)}&bgcolor=0f0f0f&color=00e5b0"
     )
     return jsonify({"url": qr_url, "target": MOBILE_QUEUE_URL})
+
+
+@app.route("/api/live-queue", methods=["GET"])
+def get_live_queue():
+    try:
+        if not is_supabase_enabled():
+            return jsonify([])
+
+        data = supabase_request(
+            "GET",
+            "live_queue",
+            "select=id,youtube_id,title,singer_name,created_at&order=created_at.asc",
+        )
+        return jsonify(
+            [
+                {
+                    "id": item.get("id"),
+                    "youtube_id": item.get("youtube_id"),
+                    "title": item.get("title", "Untitled song"),
+                    "singer_name": item.get("singer_name", "Guest"),
+                    "created_at": item.get("created_at"),
+                }
+                for item in data or []
+            ]
+        )
+    except (RuntimeError, requests.RequestException):
+        return error_response("Queue service unavailable", 503)
 
 
 @app.route("/api/live-queue", methods=["POST"])

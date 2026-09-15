@@ -110,6 +110,123 @@ class ApiEndpointTests(unittest.TestCase):
             else:
                 os.environ["KARAOKE_DB_PATH"] = original
 
+    def test_songs_upstream_failure_returns_safe_service_error(self):
+        with patch.object(
+            api,
+            "get_supabase_credentials",
+            return_value={"url": "https://example.supabase.co", "key": "test-key"},
+        ), patch.object(
+            api,
+            "supabase_request",
+            side_effect=api.requests.RequestException("upstream unavailable"),
+        ), patch.object(api, "get_db_connection", return_value=None):
+            response = self.client.get("/api/songs")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json(),
+            {"error": "Song catalog service unavailable"},
+        )
+
+    def test_songs_database_failure_returns_safe_service_error(self):
+        with patch.object(
+            api,
+            "get_supabase_credentials",
+            return_value={"url": "https://example.supabase.co", "key": "test-key"},
+        ), patch.object(api, "get_db_connection", side_effect=api.sqlite3.OperationalError):
+            response = self.client.get("/api/songs")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json(),
+            {"error": "Song catalog service unavailable"},
+        )
+
+    def test_songs_invalid_supabase_configuration_returns_safe_service_error(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SUPABASE_URL": "https://example.supabase.co",
+                "SUPABASE_ANON_KEY": "",
+                "SUPABASE_SERVICE_ROLE_KEY": "",
+                "SUPABASE_KEY": "",
+            },
+            clear=False,
+        ), patch.object(api, "get_db_connection", return_value=None):
+            response = self.client.get("/api/songs")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json(),
+            {"error": "Song catalog service unavailable"},
+        )
+
+    def test_malformed_youtube_response_returns_safe_error(self):
+        class MalformedResponse:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                raise ValueError("not json")
+
+        original = api.YOUTUBE_API_KEY
+        api.YOUTUBE_API_KEY = "test-key"
+        try:
+            with patch("api.index.requests.get", return_value=MalformedResponse()):
+                response = self.client.get("/api/search?q=test")
+        finally:
+            api.YOUTUBE_API_KEY = original
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(
+            response.get_json(),
+            {"error": "YouTube API returned an invalid response"},
+        )
+
+    def test_malformed_song_rows_are_normalized(self):
+        with patch.object(
+            api,
+            "get_supabase_credentials",
+            return_value={"url": "https://example.supabase.co", "key": "test-key"},
+        ), patch.object(
+            api,
+            "supabase_request",
+            return_value=[{"id": 7}, "not-a-song"],
+        ):
+            response = self.client.get("/api/songs")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            [
+                {
+                    "id": 7,
+                    "title": "Untitled song",
+                    "artist": "",
+                    "youtube_id": None,
+                    "rhythm_map": [],
+                }
+            ],
+        )
+
+    def test_static_application_assets_are_available(self):
+        for path in (
+            "/static/standby.png",
+            "/favicon.ico",
+            "/apple-touch-icon.png",
+            "/apple-touch-icon-precomposed.png",
+        ):
+            with self.subTest(path=path):
+                with self.client.get(path) as response:
+                    self.assertEqual(response.status_code, 200)
+
+    def test_queue_read_returns_json(self):
+        response = self.client.get("/api/live-queue")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), [])
+
     def test_unauthorized_write_request(self):
         response = self.client.post(
             "/api/leaderboard",

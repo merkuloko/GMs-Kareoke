@@ -62,3 +62,14 @@ Notes:
 - If you use the anon key for leaderboard features, allow `select`, `insert`, and `delete` on `public.leaderboard_entries`.
 - Use the project API URL from `Project Settings -> API`, not the dashboard URL.
 - Do not commit real Supabase keys into `.env.example` or your repo.
+
+Troubleshooting the song catalog:
+
+- `GET /api/songs` uses `SUPABASE_SONGS_TABLE` when Supabase credentials are configured.
+- A Supabase `404` for `/rest/v1/songs` means the configured project does not expose that table
+  through its REST API. Create the `public.songs` table above, set
+  `SUPABASE_SONGS_TABLE` to the actual table name, and confirm the API schema and RLS
+  `select` policy are enabled.
+- If Supabase is unavailable but a local SQLite database exists, the application falls back
+  to SQLite. If neither source is available, `/api/songs` returns a safe `503` JSON error
+  instead of exposing the upstream response or traceback.
