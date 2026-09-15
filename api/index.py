@@ -24,7 +24,7 @@ import os
 import secrets
 import sqlite3
 from functools import wraps
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 
 import requests
 from flask import Flask, jsonify, render_template, request, send_from_directory
@@ -62,6 +62,24 @@ SUPABASE_LEADERBOARD_TABLE = os.environ.get(
 )
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()
 MOBILE_QUEUE_URL = os.environ.get("MOBILE_QUEUE_URL", "").strip()
+
+
+def get_mobile_queue_url():
+    configured_url = MOBILE_QUEUE_URL.rstrip("/")
+    if not configured_url:
+        return ""
+
+    parsed = urlparse(configured_url)
+    is_local_target = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+
+    if configured_url and not is_local_target:
+        if parsed.path in {"", "/"}:
+            return f"{configured_url}/mobile"
+        return configured_url
+
+    if request:
+        return f"{request.url_root.rstrip('/')}/mobile"
+    return ""
 
 
 def error_response(message, status=400, **extra):
@@ -394,7 +412,8 @@ def home():
             get_write_cookie_value(),
             httponly=True,
             samesite="Lax",
-            secure=not app.config["DEBUG"],
+            secure=not app.config["DEBUG"] and request.is_secure,
+            path="/",
         )
     return response
 
@@ -439,7 +458,8 @@ def mobile_queue():
             get_write_cookie_value(),
             httponly=True,
             samesite="Lax",
-            secure=not app.config["DEBUG"],
+            secure=not app.config["DEBUG"] and request.is_secure,
+            path="/",
         )
     return response
 
@@ -599,14 +619,15 @@ def delete_leaderboard():
 
 @app.route("/api/queue-qr")
 def queue_qr():
-    if not MOBILE_QUEUE_URL:
+    mobile_queue_url = get_mobile_queue_url()
+    if not mobile_queue_url:
         return error_response("Mobile queue URL not configured", 404)
 
     qr_url = (
         "https://api.qrserver.com/v1/create-qr-code/"
-        f"?size=110x110&data={quote_plus(MOBILE_QUEUE_URL)}&bgcolor=0f0f0f&color=00e5b0"
+        f"?size=110x110&data={quote_plus(mobile_queue_url)}&bgcolor=0f0f0f&color=00e5b0"
     )
-    return jsonify({"url": qr_url, "target": MOBILE_QUEUE_URL})
+    return jsonify({"url": qr_url, "target": mobile_queue_url})
 
 
 @app.route("/api/live-queue", methods=["GET"])
@@ -624,6 +645,7 @@ def get_live_queue():
             [
                 {
                     "id": item.get("id"),
+                    "db_id": item.get("id"),
                     "youtube_id": item.get("youtube_id"),
                     "title": item.get("title", "Untitled song"),
                     "singer_name": item.get("singer_name", "Guest"),
@@ -650,6 +672,8 @@ def add_to_queue():
 
     if not video_id or not title or not singer_name:
         return error_response("Missing song details", 400)
+    if len(video_id) > 100 or len(title) > 300 or len(singer_name) > 100:
+        return error_response("Song details are too long", 400)
 
     try:
         supabase_request(
@@ -663,12 +687,13 @@ def add_to_queue():
             prefer="return=minimal",
         )
         return jsonify({"message": "Success"}), 200
-    except RuntimeError as exc:
-        return error_response(str(exc), 503)
+    except RuntimeError:
+        return error_response("Queue service is not configured", 503)
     except requests.RequestException:
         return error_response("Queue service unavailable", 503)
-    except Exception as exc:
-        return error_response(f"Unable to add song to queue: {exc}", 500)
+    except Exception:
+        logger.exception("Unable to add song to queue")
+        return error_response("Unable to add song to queue", 500)
 
 
 @app.route("/api/live-queue", methods=["DELETE"])

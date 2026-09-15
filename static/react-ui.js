@@ -225,6 +225,20 @@ function App() {
   }, [currentSong.id]);
 
   useEffect(() => {
+    async function loadLiveQueue() {
+      try {
+        const items = await fetchJson('/api/live-queue');
+        if (!Array.isArray(items)) return;
+        setQueue(items.map((item) => normalizeSong({
+          ...item,
+          db_id: item.db_id || item.id,
+          requestor: item.singer_name,
+        })));
+      } catch (error) {
+        setStatusMessage('Live queue is temporarily unavailable.');
+      }
+    }
+
     async function loadInitialData() {
       const [configResult, songsResult, leaderboardResult] = await Promise.allSettled([
         fetchJson('/api/config'),
@@ -260,9 +274,13 @@ function App() {
           }
         }
       }
+
+      await loadLiveQueue();
     }
 
     loadInitialData();
+    const queueTimer = window.setInterval(loadLiveQueue, 5000);
+    return () => window.clearInterval(queueTimer);
   }, []);
 
   useEffect(() => {

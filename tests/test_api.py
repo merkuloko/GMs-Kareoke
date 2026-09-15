@@ -58,6 +58,54 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.get_json()["message"], "Success")
         mock_request.assert_called_once()
 
+    def test_mobile_page_auth_cookie_is_available_to_api_routes(self):
+        response = self.client.get("/mobile")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Path=/", response.headers.get("Set-Cookie", ""))
+        with patch.object(api, "supabase_request", return_value=None):
+            queue_response = self.client.post(
+                "/api/live-queue",
+                json={
+                    "youtube_id": "abc123",
+                    "title": "Take On Me",
+                    "singer_name": "Jamie",
+                },
+            )
+        self.assertEqual(queue_response.status_code, 200)
+
+    def test_queue_qr_targets_mobile_path(self):
+        response = self.client.get("/api/queue-qr")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["target"], "https://example.com/mobile")
+
+    def test_queue_qr_replaces_local_target_on_deployed_host(self):
+        original = api.MOBILE_QUEUE_URL
+        api.MOBILE_QUEUE_URL = "http://127.0.0.1:5000/mobile"
+        try:
+            response = self.client.get(
+                "/api/queue-qr",
+                base_url="https://gms-kareoke.vercel.app",
+            )
+        finally:
+            api.MOBILE_QUEUE_URL = original
+        self.assertEqual(
+            response.get_json()["target"],
+            "https://gms-kareoke.vercel.app/mobile",
+        )
+
+    def test_queue_request_rejects_oversized_fields(self):
+        response = self.client.post(
+            "/api/live-queue",
+            json={
+                "youtube_id": "abc123",
+                "title": "x" * 301,
+                "singer_name": "Jamie",
+            },
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "Song details are too long")
+
     def test_queue_delete_requires_secret(self):
         response = self.client.delete("/api/live-queue")
         self.assertEqual(response.status_code, 401)
@@ -226,6 +274,30 @@ class ApiEndpointTests(unittest.TestCase):
         response = self.client.get("/api/live-queue")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), [])
+
+    def test_queue_read_preserves_database_id_and_singer(self):
+        with patch.object(
+            api,
+            "get_supabase_credentials",
+            return_value={"url": "https://example.supabase.co", "key": "test-key"},
+        ), patch.object(
+            api,
+            "supabase_request",
+            return_value=[
+                {
+                    "id": 35,
+                    "youtube_id": "abc123",
+                    "title": "Take On Me",
+                    "singer_name": "Jamie",
+                    "created_at": "2026-09-15T00:00:00Z",
+                }
+            ],
+        ):
+            response = self.client.get("/api/live-queue")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()[0]["db_id"], 35)
+        self.assertEqual(response.get_json()[0]["singer_name"], "Jamie")
 
     def test_unauthorized_write_request(self):
         response = self.client.post(
