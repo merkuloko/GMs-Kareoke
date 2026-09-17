@@ -421,6 +421,15 @@ function App() {
     openSongFinished();
   }
 
+  function togglePlayback() {
+    if (!playerRef.current) return;
+    if (isPlaying && typeof playerRef.current.pauseVideo === 'function') {
+      playerRef.current.pauseVideo();
+    } else if (typeof playerRef.current.playVideo === 'function') {
+      playerRef.current.playVideo();
+    }
+  }
+
   function setSongByText(event) {
     const selected = event.target.value;
     if (!selected) return;
@@ -475,6 +484,14 @@ function App() {
         React.createElement(
           'aside',
           { className: 'side-column' },
+          React.createElement(
+            'nav',
+            { className: 'card console-nav', 'aria-label': 'Host console navigation' },
+            React.createElement('div', { className: 'nav-overline' }, 'Workspace'),
+            React.createElement('button', { className: 'nav-item active', type: 'button', onClick: () => setStatusMessage('Queue workspace active.') }, React.createElement('span', { className: 'nav-icon' }, '≡'), 'Queue'),
+            React.createElement('button', { className: 'nav-item', type: 'button', onClick: () => setStatusMessage('Leaderboard workspace active.') }, React.createElement('span', { className: 'nav-icon' }, '★'), 'Leaderboard'),
+            React.createElement('button', { className: 'nav-item', type: 'button', onClick: () => setModalOpen(true) }, React.createElement('span', { className: 'nav-icon' }, '⚙'), 'Settings')
+          ),
           React.createElement(
             'div',
             { className: 'card side-panel' },
@@ -731,6 +748,30 @@ function App() {
                   React.createElement('span', { className: 'queue-more' }, '···')
                 ))
           )
+        )
+      ),
+      React.createElement(
+        'footer',
+        { className: 'playback-bar', 'aria-label': 'Playback controls' },
+        React.createElement(
+          'div',
+          { className: 'playback-track' },
+          React.createElement('span', { className: 'playback-kicker' }, 'Now playing'),
+          React.createElement('strong', null, currentSong.title || 'Choose a song'),
+          React.createElement('span', null, currentSong.requestor || 'Guest singer')
+        ),
+        React.createElement(
+          'div',
+          { className: 'playback-actions' },
+          React.createElement('button', { className: 'playback-button', type: 'button', onClick: () => setScore(0), 'aria-label': 'Reset score' }, '↺'),
+          React.createElement('button', { className: 'playback-button playback-primary', type: 'button', onClick: togglePlayback, 'aria-label': isPlaying ? 'Pause song' : 'Play song' }, isPlaying ? 'Ⅱ' : '▶'),
+          React.createElement('button', { className: 'playback-button', type: 'button', onClick: nextSong, 'aria-label': 'Finish song' }, '›')
+        ),
+        React.createElement(
+          'div',
+          { className: 'playback-status' },
+          React.createElement('span', { className: `state-dot ${isPlaying ? 'is-playing' : ''}` }),
+          isPlaying ? 'Playing' : 'Ready'
         )
       ),
       songFinished && React.createElement(
