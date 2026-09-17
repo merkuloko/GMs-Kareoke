@@ -350,7 +350,7 @@ function App() {
       setSearchResults([]);
       setStatusMessage(
         error.message ||
-        'No matching catalog song found. Configure a YouTube API key for live search.'
+        'Live search is unavailable. Add YOUTUBE_API_KEY to .env and restart Flask.'
       );
     }
   }

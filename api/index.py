@@ -60,7 +60,10 @@ SUPABASE_TABLE = os.environ.get("SUPABASE_SONGS_TABLE", "songs")
 SUPABASE_LEADERBOARD_TABLE = os.environ.get(
     "SUPABASE_LEADERBOARD_TABLE", "leaderboard_entries"
 )
-YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()
+YOUTUBE_API_KEY = (
+    os.environ.get("YOUTUBE_API_KEY", "").strip()
+    or os.environ.get("YOUTUBE_API", "").strip()
+)
 MOBILE_QUEUE_URL = os.environ.get("MOBILE_QUEUE_URL", "").strip()
 
 

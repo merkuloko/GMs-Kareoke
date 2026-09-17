@@ -87,6 +87,25 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["target"], "https://example.com/mobile")
 
+    def test_youtube_api_alias_is_supported(self):
+        original_key = os.environ.pop("YOUTUBE_API_KEY", None)
+        original_alias = os.environ.get("YOUTUBE_API")
+        os.environ["YOUTUBE_API"] = "legacy-test-key"
+        original_module_key = api.YOUTUBE_API_KEY
+        try:
+            api.YOUTUBE_API_KEY = (
+                os.environ.get("YOUTUBE_API_KEY", "").strip()
+                or os.environ.get("YOUTUBE_API", "").strip()
+            )
+            self.assertEqual(api.YOUTUBE_API_KEY, "legacy-test-key")
+        finally:
+            api.YOUTUBE_API_KEY = original_module_key
+            os.environ.pop("YOUTUBE_API", None)
+            if original_alias is not None:
+                os.environ["YOUTUBE_API"] = original_alias
+            if original_key is not None:
+                os.environ["YOUTUBE_API_KEY"] = original_key
+
     def test_queue_qr_replaces_local_target_on_deployed_host(self):
         original = api.MOBILE_QUEUE_URL
         api.MOBILE_QUEUE_URL = "http://127.0.0.1:5000/mobile"
