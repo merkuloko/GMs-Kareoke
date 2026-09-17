@@ -558,10 +558,14 @@ function App() {
           )
         )
       ),
+      React.createElement(
+        'div',
+        { className: 'content-grid' },
+        React.createElement(
+          'aside',
+          { className: 'side-column' },
           React.createElement(
             'div',
-            { className: 'card side-panel' },
-            React.createElement(
             { className: 'card side-panel' },
             React.createElement(
               'div',
@@ -843,7 +847,6 @@ function App() {
           )
         )
       ),
-      ),
       React.createElement(
         'footer',
         { className: 'playback-bar', 'aria-label': 'Playback controls' },
@@ -946,7 +949,6 @@ function App() {
           )
         )
       )
-    )
   );
 }
 
