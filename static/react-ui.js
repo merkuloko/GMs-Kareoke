@@ -347,7 +347,11 @@ function App() {
         setStatusMessage('');
         return;
       }
-      setStatusMessage(error.message || 'Search failed.');
+      setSearchResults([]);
+      setStatusMessage(
+        error.message ||
+        'No matching catalog song found. Configure a YouTube API key for live search.'
+      );
     }
   }
 

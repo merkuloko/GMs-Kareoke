@@ -575,7 +575,14 @@ def search_youtube():
 
     if not YOUTUBE_API_KEY:
         try:
-            return jsonify(search_catalog(query))
+            results = search_catalog(query)
+            if not results:
+                return error_response(
+                    "No matching catalog songs found. Configure YOUTUBE_API_KEY "
+                    "for live YouTube search.",
+                    503,
+                )
+            return jsonify(results)
         except (RuntimeError, requests.RequestException, sqlite3.Error):
             return error_response("Song catalog service unavailable", 503)
 
