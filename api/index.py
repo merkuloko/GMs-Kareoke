@@ -23,6 +23,7 @@ import logging
 import os
 import secrets
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from urllib.parse import quote_plus, urlparse
@@ -53,7 +54,17 @@ app = Flask(
 )
 app.config["DEBUG"] = is_debug_enabled()
 app.config["JSON_SORT_KEYS"] = False
-CORS(app)
+DEFAULT_ALLOWED_ORIGINS = {
+    "http://localhost:5000",
+    "http://127.0.0.1:5000",
+    "https://kareoke-2-f8fa19705d7d53eb8abd7752c.vercel.app",
+}
+ALLOWED_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+} or DEFAULT_ALLOWED_ORIGINS
+CORS(app, resources={r"/api/*": {"origins": sorted(ALLOWED_ORIGINS)}})
 
 HTTP_TIMEOUT_SECONDS = 10
 DEFAULT_DB_CANDIDATES = ("karaoke.db", "kareoke.db")
@@ -69,6 +80,9 @@ SCORING_ENABLED = os.environ.get("SCORING_ENABLED", "true").strip().lower() not 
     "off",
 }
 MOBILE_QUEUE_URL = os.environ.get("MOBILE_QUEUE_URL", "").strip()
+QUEUE_RATE_LIMIT = 10
+QUEUE_RATE_WINDOW_SECONDS = 60
+queue_rate_state = {}
 
 
 def get_mobile_queue_url():
@@ -133,7 +147,7 @@ def require_write_auth(func):
 def require_queue_request_auth(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if get_write_secret() and not require_write_secret():
+        if not get_write_secret() or not require_write_secret():
             return error_response("Unauthorized", 401)
         return func(*args, **kwargs)
 
@@ -143,7 +157,7 @@ def require_queue_request_auth(func):
 def require_score_submission_auth(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if get_write_secret() and not require_write_secret():
+        if not get_write_secret() or not require_write_secret():
             return error_response("Unauthorized", 401)
         return func(*args, **kwargs)
 
@@ -153,7 +167,7 @@ def require_score_submission_auth(func):
 def require_configured_write_auth(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if get_write_secret() and not require_write_secret():
+        if not get_write_secret() or not require_write_secret():
             return error_response("Unauthorized", 401)
         return func(*args, **kwargs)
 
@@ -173,6 +187,23 @@ def get_json_body(required_fields=None):
             if value is None or (isinstance(value, str) and not value.strip()):
                 raise ValueError(f"Missing or empty field: {field}")
     return payload
+
+
+def check_queue_rate_limit():
+    now = time.monotonic()
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
+    client_ip = client_ip.split(",", 1)[0].strip()
+    timestamps = [
+        timestamp
+        for timestamp in queue_rate_state.get(client_ip, [])
+        if now - timestamp < QUEUE_RATE_WINDOW_SECONDS
+    ]
+    if len(timestamps) >= QUEUE_RATE_LIMIT:
+        queue_rate_state[client_ip] = timestamps
+        return False
+    timestamps.append(now)
+    queue_rate_state[client_ip] = timestamps
+    return True
 
 
 def resolve_db_path():
@@ -779,6 +810,9 @@ def get_live_queue():
 @app.route("/api/live-queue", methods=["POST"])
 @require_queue_request_auth
 def add_to_queue():
+    if not check_queue_rate_limit():
+        return error_response("Too many queue requests. Try again later.", 429)
+
     try:
         data = get_json_body(["youtube_id", "title", "singer_name"])
     except ValueError as exc:

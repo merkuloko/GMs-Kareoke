@@ -106,6 +106,12 @@ YOUTUBE_API=your_youtube_api_key
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your_anon_key
 MOBILE_QUEUE_URL=http://127.0.0.1:5000/mobile
+KARAOKE_WRITE_SECRET=use-a-long-random-secret
+ALLOWED_ORIGINS=http://127.0.0.1:5000,http://localhost:5000
+
+All queue and leaderboard writes require `KARAOKE_WRITE_SECRET`; production
+requests fail closed if it is missing. Keep `YOUTUBE_API` and Supabase keys
+server-side and configure `ALLOWED_ORIGINS` with only trusted frontend origins.
 
 ⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻
 

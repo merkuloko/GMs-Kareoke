@@ -286,7 +286,7 @@ function renderSearchResult(video) {
   item.appendChild(text);
   item.addEventListener("click", () => {
     addToQueue({ id: video.id, title: video.title, rhythm_map: [] });
-    els.searchResults.innerHTML = "";
+    els.searchResults.replaceChildren();
     els.searchInput.value = "";
   });
 

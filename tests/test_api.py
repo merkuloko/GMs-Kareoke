@@ -148,7 +148,7 @@ class ApiEndpointTests(unittest.TestCase):
         response = self.client.delete("/api/live-queue")
         self.assertEqual(response.status_code, 401)
 
-    def test_queue_request_is_public_when_write_secret_is_not_configured(self):
+    def test_queue_request_fails_closed_when_write_secret_is_not_configured(self):
         original = os.environ.pop("KARAOKE_WRITE_SECRET", None)
         try:
             with patch.object(api, "supabase_request", return_value=None):
@@ -163,7 +163,7 @@ class ApiEndpointTests(unittest.TestCase):
         finally:
             if original is not None:
                 os.environ["KARAOKE_WRITE_SECRET"] = original
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 401)
 
     def test_queue_delete_success(self):
         with patch.object(api, "supabase_request", return_value=None):
@@ -207,15 +207,14 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("must not contain duplicates", response.get_json()["error"])
 
-    def test_queue_delete_is_public_when_write_secret_is_not_configured(self):
+    def test_queue_delete_fails_closed_when_write_secret_is_not_configured(self):
         original = os.environ.pop("KARAOKE_WRITE_SECRET", None)
         try:
             response = self.client.delete("/api/live-queue")
         finally:
             if original is not None:
                 os.environ["KARAOKE_WRITE_SECRET"] = original
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["message"], "Queue cleared")
+        self.assertEqual(response.status_code, 401)
 
     def test_invalid_leaderboard_request(self):
         response = self.client.post(
@@ -235,7 +234,7 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("zero or greater", response.get_json()["error"])
 
-    def test_score_submission_is_public_when_write_secret_is_not_configured(self):
+    def test_score_submission_fails_closed_when_write_secret_is_not_configured(self):
         original = os.environ.pop("KARAOKE_WRITE_SECRET", None)
         try:
             with patch.object(
@@ -250,7 +249,7 @@ class ApiEndpointTests(unittest.TestCase):
         finally:
             if original is not None:
                 os.environ["KARAOKE_WRITE_SECRET"] = original
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 401)
 
     def test_missing_youtube_api_key(self):
         original = api.YOUTUBE_API
