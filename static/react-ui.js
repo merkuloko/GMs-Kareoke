@@ -558,47 +558,6 @@ function App() {
           )
         )
       ),
-      React.createElement(
-        'div',
-        { className: 'content-grid' },
-        React.createElement(
-          'aside',
-          { className: 'side-column' },
-          React.createElement(
-            'nav',
-            { className: 'card console-nav', 'aria-label': 'Host console navigation' },
-            React.createElement('button', { className: 'nav-item active', type: 'button', onClick: () => setStatusMessage('Queue view active.') }, React.createElement('span', { className: 'nav-icon' }, '≡'), 'Queue'),
-            React.createElement('button', { className: 'nav-item', type: 'button', onClick: () => setStatusMessage('Leaderboard view active.') }, React.createElement('span', { className: 'nav-icon' }, '★'), 'Leaderboard'),
-            React.createElement('button', { className: 'nav-item', type: 'button', onClick: () => setModalOpen(true) }, React.createElement('span', { className: 'nav-icon' }, '⚙'), 'Settings')
-          ),
-          React.createElement(
-            'div',
-            { className: 'card side-panel' },
-            React.createElement(
-              'div',
-              { className: 'panel-header' },
-              React.createElement('div', { className: 'panel-title' }, 'Leaderboard'),
-              React.createElement('button', { className: 'small-button', onClick: clearLeaderboard }, 'Clear')
-            ),
-            React.createElement(
-              'div',
-              { className: 'list-stack' },
-              displayLeaderboard.length === 0
-                ? React.createElement('div', { className: 'empty-message' }, 'No scores yet')
-                : displayLeaderboard.map((entry, index) => React.createElement(
-                    'div',
-                    { key: `${entry.name}-${index}`, className: 'list-item' },
-                    React.createElement(
-                      'div',
-                      { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-                      React.createElement('span', { className: `rank ${index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : ''}` }, `#${index + 1}`),
-                      React.createElement('span', null, entry.name || 'Guest')
-                    ),
-                    React.createElement('strong', { style: { color: '#7dd3fc' } }, formatScore(entry.score || 0))
-                  ))
-            )
-          )
-        ),
         React.createElement(
           'main',
           { className: 'stage-column' },
