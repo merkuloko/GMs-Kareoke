@@ -23,6 +23,7 @@ import logging
 import os
 import secrets
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from urllib.parse import quote_plus, urlparse
 
@@ -462,15 +463,66 @@ def app_icon():
     return send_from_directory(app.static_folder, "standby.png", mimetype="image/png")
 
 
-@app.route("/api/live-queue/<item_id>", methods=["PATCH"])
-@require_write_auth
-def mark_queue_played(item_id):
+@app.route("/api/live-queue/reorder", methods=["PATCH"])
+@require_configured_write_auth
+def reorder_live_queue():
+    try:
+        data = get_json_body(["item_ids"])
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+
+    item_ids = data["item_ids"]
+    if not isinstance(item_ids, list) or not item_ids:
+        return error_response("item_ids must be a non-empty list", 400)
+
+    try:
+        normalized_ids = [int(item_id) for item_id in item_ids]
+    except (TypeError, ValueError):
+        return error_response("item_ids must contain integers", 400)
+
+    if len(set(normalized_ids)) != len(normalized_ids):
+        return error_response("item_ids must not contain duplicates", 400)
+
+    try:
+        start_time = datetime.now(timezone.utc)
+        for index, item_id in enumerate(normalized_ids):
+            supabase_request(
+                "PATCH",
+                "live_queue",
+                query_string=f"id=eq.{item_id}",
+                payload={
+                    "created_at": (start_time + timedelta(milliseconds=index)).isoformat()
+                },
+                prefer="return=minimal",
+            )
+        return jsonify({"message": "Queue reordered"}), 200
+    except RuntimeError as exc:
+        return error_response(str(exc), 503)
+    except requests.RequestException:
+        return error_response("Queue service unavailable", 503)
+    except Exception as exc:
+        logger.exception("Unable to reorder queue")
+        return error_response(f"Unable to reorder queue: {exc}", 500)
+
+
+@app.route("/api/live-queue/<item_id>", methods=["DELETE", "PATCH"])
+@require_configured_write_auth
+def manage_queue_item(item_id):
     try:
         item_id = int(item_id)
     except (TypeError, ValueError):
         return error_response("Invalid queue item id", 400)
 
     try:
+        if request.method == "DELETE":
+            supabase_request(
+                "DELETE",
+                "live_queue",
+                query_string=f"id=eq.{item_id}",
+                prefer="return=minimal",
+            )
+            return jsonify({"message": "Queue item removed"}), 200
+
         supabase_request(
             "PATCH",
             "live_queue",
@@ -483,7 +535,7 @@ def mark_queue_played(item_id):
     except requests.RequestException:
         return error_response("Queue service unavailable", 503)
     except Exception as exc:
-        return error_response(f"Unable to mark queue item as played: {exc}", 500)
+        return error_response(f"Unable to update queue item: {exc}", 500)
 
 
 @app.route("/mobile")
@@ -705,7 +757,7 @@ def get_live_queue():
         data = supabase_request(
             "GET",
             "live_queue",
-            "select=id,youtube_id,title,singer_name,created_at&order=created_at.asc",
+            "select=id,youtube_id,title,singer_name,created_at&order=created_at.asc,id.asc",
         )
         return jsonify(
             [

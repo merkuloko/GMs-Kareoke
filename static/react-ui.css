@@ -1417,11 +1417,41 @@ button:hover {
 
 .queue-item {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 16px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
   padding: 10px 8px;
   border-bottom: 1px solid #292e35;
+}
+
+.queue-item[draggable="true"] {
+  cursor: grab;
+}
+
+.queue-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.queue-dragging {
+  opacity: 0.45;
+  border-color: var(--accent);
+}
+
+.queue-remove {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  border-radius: 9px;
+  background: rgba(127, 29, 51, 0.16);
+  color: var(--rose);
+  cursor: pointer;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.queue-remove:hover {
+  border-color: var(--rose);
+  background: rgba(127, 29, 51, 0.32);
 }
 
 .queue-item:last-child {

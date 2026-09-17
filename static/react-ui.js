@@ -30,6 +30,7 @@ function normalizeSong(song) {
   if (!song) return { ...DEFAULT_SONG };
   return {
     id: song.youtube_id || song.id || DEFAULT_SONG.id,
+    db_id: song.db_id || song.id || '',
     title: song.title || 'Untitled song',
     artist: song.artist || '',
     rhythm_map: Array.isArray(song.rhythm_map) ? song.rhythm_map : [],
@@ -60,7 +61,7 @@ function App() {
   const [submissionError, setSubmissionError] = useState('');
   const [isSubmittingScore, setIsSubmittingScore] = useState(false);
   const [completedResult, setCompletedResult] = useState(null);
-  const [queueSubmission, setQueueSubmission] = useState(false);
+  const [draggedQueueId, setDraggedQueueId] = useState(null);
 
   const playerRef = useRef(null);
   const audioCtxRef = useRef(null);
@@ -76,6 +77,7 @@ function App() {
   const finishedSongRef = useRef(null);
   const advanceTimerRef = useRef(null);
   const singerInputRef = useRef(null);
+  const queueSubmissionRef = useRef(false);
 
   useEffect(() => {
     scoreRef.current = score;
@@ -368,9 +370,9 @@ function App() {
   }
 
   async function addSongToQueue(song) {
-    if (queueSubmission) return;
+    if (queueSubmissionRef.current) return;
     const normalized = normalizeSong(song);
-    setQueueSubmission(true);
+    queueSubmissionRef.current = true;
     try {
       await fetchJson('/api/live-queue', {
         method: 'POST',
@@ -389,7 +391,50 @@ function App() {
     } catch (error) {
       setStatusMessage(error.message || 'Unable to add song to queue.');
     } finally {
-      setQueueSubmission(false);
+      queueSubmissionRef.current = false;
+    }
+  }
+
+  async function removeQueueItem(song) {
+    const itemId = song.db_id || song.id;
+    if (!itemId) {
+      setStatusMessage('This queue item cannot be removed.');
+      return;
+    }
+
+    try {
+      await fetchJson(`/api/live-queue/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+      setQueue((previous) => previous.filter((item) => String(item.db_id || item.id) !== String(itemId)));
+      setStatusMessage('Song removed from queue.');
+    } catch (error) {
+      setStatusMessage(error.message || 'Unable to remove song from queue.');
+    }
+  }
+
+  async function reorderQueue(sourceId, targetId) {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    const sourceIndex = queue.findIndex((song) => String(song.db_id || song.id) === String(sourceId));
+    const targetIndex = queue.findIndex((song) => String(song.db_id || song.id) === String(targetId));
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const nextQueue = [...queue];
+    const [movedSong] = nextQueue.splice(sourceIndex, 1);
+    nextQueue.splice(targetIndex, 0, movedSong);
+    setQueue(nextQueue);
+    setDraggedQueueId(null);
+
+    try {
+      await fetchJson('/api/live-queue/reorder', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_ids: nextQueue.map((song) => song.db_id || song.id),
+        }),
+      });
+      setStatusMessage('Queue order saved.');
+    } catch (error) {
+      setStatusMessage(error.message || 'Unable to save queue order.');
+      setQueue(queue);
     }
   }
 
@@ -522,9 +567,8 @@ function App() {
           React.createElement(
             'nav',
             { className: 'card console-nav', 'aria-label': 'Host console navigation' },
-            React.createElement('div', { className: 'nav-overline' }, 'Workspace'),
-            React.createElement('button', { className: 'nav-item active', type: 'button', onClick: () => setStatusMessage('Queue workspace active.') }, React.createElement('span', { className: 'nav-icon' }, '≡'), 'Queue'),
-            React.createElement('button', { className: 'nav-item', type: 'button', onClick: () => setStatusMessage('Leaderboard workspace active.') }, React.createElement('span', { className: 'nav-icon' }, '★'), 'Leaderboard'),
+            React.createElement('button', { className: 'nav-item active', type: 'button', onClick: () => setStatusMessage('Queue view active.') }, React.createElement('span', { className: 'nav-icon' }, '≡'), 'Queue'),
+            React.createElement('button', { className: 'nav-item', type: 'button', onClick: () => setStatusMessage('Leaderboard view active.') }, React.createElement('span', { className: 'nav-icon' }, '★'), 'Leaderboard'),
             React.createElement('button', { className: 'nav-item', type: 'button', onClick: () => setModalOpen(true) }, React.createElement('span', { className: 'nav-icon' }, '⚙'), 'Settings')
           ),
           React.createElement(
@@ -770,10 +814,23 @@ function App() {
             ),
             queue.length === 0
               ? React.createElement('div', { className: 'empty-message' }, 'No upcoming songs')
-              : queue.map((song, index) => React.createElement(
-                  'div',
-                  { key: `${song.id}-${index}`, className: `queue-item ${index === 0 ? 'queue-next' : ''}` },
-                  React.createElement('span', { className: 'queue-number' }, String(index + 1).padStart(2, '0')),
+              :               queue.map((song, index) => {
+                const queueId = String(song.db_id || song.id);
+                return React.createElement(
+                    'div',
+                    {
+                      key: queueId,
+                      className: `queue-item ${index === 0 ? 'queue-next' : ''} ${draggedQueueId === queueId ? 'queue-dragging' : ''}`,
+                      draggable: true,
+                      onDragStart: () => setDraggedQueueId(queueId),
+                      onDragOver: (event) => event.preventDefault(),
+                      onDrop: (event) => {
+                        event.preventDefault();
+                        reorderQueue(draggedQueueId, queueId);
+                      },
+                      onDragEnd: () => setDraggedQueueId(null),
+                    },
+                    React.createElement('span', { className: 'queue-number' }, String(index + 1).padStart(2, '0')),
                   React.createElement(
                     'div',
                     { className: 'queue-copy' },
@@ -781,8 +838,19 @@ function App() {
                     React.createElement('strong', null, song.requestor || 'Guest singer'),
                     React.createElement('span', null, song.title)
                   ),
-                  React.createElement('span', { className: 'queue-more' }, '···')
-                ))
+                  React.createElement(
+                    'button',
+                    {
+                      className: 'queue-remove',
+                      type: 'button',
+                      title: 'Remove from queue',
+                      'aria-label': `Remove ${song.title || 'song'} from queue`,
+                      onClick: () => removeQueueItem(song),
+                    },
+                    '×'
+                  )
+                );
+            })
           )
         )
       ),

@@ -138,6 +138,8 @@ Live Queue
 
 * POST /api/live-queue → Add song to queue
 * PATCH /api/live-queue/<id> → Mark as played
+* DELETE /api/live-queue/<id> → Remove one queued song
+* PATCH /api/live-queue/reorder → Persist the host's queue order
 * DELETE /api/live-queue → Clear queue
 
 Config / Utilities

@@ -171,6 +171,42 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["message"], "Queue cleared")
 
+    def test_queue_item_delete_success(self):
+        with patch.object(api, "supabase_request", return_value=None) as mock_request:
+            response = self.client.delete("/api/live-queue/42", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["message"], "Queue item removed")
+        mock_request.assert_called_once_with(
+            "DELETE",
+            "live_queue",
+            query_string="id=eq.42",
+            prefer="return=minimal",
+        )
+
+    def test_queue_reorder_updates_items_in_requested_order(self):
+        with patch.object(api, "supabase_request", return_value=None) as mock_request:
+            response = self.client.patch(
+                "/api/live-queue/reorder",
+                json={"item_ids": [7, 3, 11]},
+                headers=self.headers,
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["message"], "Queue reordered")
+        self.assertEqual(mock_request.call_count, 3)
+        self.assertEqual(
+            [call.kwargs["query_string"] for call in mock_request.call_args_list],
+            ["id=eq.7", "id=eq.3", "id=eq.11"],
+        )
+
+    def test_queue_reorder_rejects_duplicate_ids(self):
+        response = self.client.patch(
+            "/api/live-queue/reorder",
+            json={"item_ids": [7, 7]},
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("must not contain duplicates", response.get_json()["error"])
+
     def test_queue_delete_is_public_when_write_secret_is_not_configured(self):
         original = os.environ.pop("KARAOKE_WRITE_SECRET", None)
         try:
