@@ -42,6 +42,7 @@ function App() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [queue, setQueue] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
+  const [songCatalog, setSongCatalog] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentSong, setCurrentSong] = useState(DEFAULT_SONG);
   const [scoringEnabled, setScoringEnabled] = useState(true);
@@ -250,6 +251,7 @@ function App() {
         const normalizedSongs = Array.isArray(songsResult.value)
           ? songsResult.value.map(normalizeSong)
           : [];
+        setSongCatalog(normalizedSongs);
         if (normalizedSongs.length) {
           setCurrentSong(normalizedSongs[0]);
           setSongPickerText(normalizedSongs[0].title);
@@ -323,13 +325,28 @@ function App() {
       return;
     }
 
+    const queryLower = query.toLowerCase();
+    const fallbackCatalogMatches = songCatalog.filter((song) => {
+      const title = (song.title || '').toLowerCase();
+      const artist = (song.artist || '').toLowerCase();
+      return title.includes(queryLower) || artist.includes(queryLower);
+    });
+
     setStatusMessage('Searching...');
     try {
       const results = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
-      const items = Array.isArray(results) ? results : [];
+      let items = Array.isArray(results) ? results : [];
+      if (!items.length && fallbackCatalogMatches.length) {
+        items = fallbackCatalogMatches;
+      }
       setSearchResults(items);
       setStatusMessage(items.length ? '' : 'No songs found.');
     } catch (error) {
+      if (fallbackCatalogMatches.length) {
+        setSearchResults(fallbackCatalogMatches);
+        setStatusMessage('');
+        return;
+      }
       setStatusMessage(error.message || 'Search failed.');
     }
   }
@@ -819,9 +836,18 @@ function App() {
                   }),
                   submissionError && React.createElement('div', { id: 'singer-name-error', className: 'form-error', role: 'alert' }, submissionError),
                   React.createElement(
-                    'button',
-                    { className: 'primary-button continue-button', type: 'submit', disabled: isSubmittingScore },
-                    isSubmittingScore ? 'Saving score…' : 'Continue'
+                    'div',
+                    { className: 'modal-actions' },
+                    React.createElement(
+                      'button',
+                      { className: 'secondary-button skip-button', type: 'button', onClick: advanceAfterCompletion, disabled: isSubmittingScore },
+                      'Skip score'
+                    ),
+                    React.createElement(
+                      'button',
+                      { className: 'primary-button continue-button', type: 'submit', disabled: isSubmittingScore },
+                      isSubmittingScore ? 'Saving score…' : 'Continue'
+                    )
                   )
                 )
               )
