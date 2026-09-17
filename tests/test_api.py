@@ -157,6 +157,16 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["message"], "Queue cleared")
 
+    def test_queue_delete_is_public_when_write_secret_is_not_configured(self):
+        original = os.environ.pop("KARAOKE_WRITE_SECRET", None)
+        try:
+            response = self.client.delete("/api/live-queue")
+        finally:
+            if original is not None:
+                os.environ["KARAOKE_WRITE_SECRET"] = original
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["message"], "Queue cleared")
+
     def test_invalid_leaderboard_request(self):
         response = self.client.post(
             "/api/leaderboard",
