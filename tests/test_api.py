@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 
 os.environ.setdefault("KARAOKE_WRITE_SECRET", "test-secret")
 os.environ.setdefault("MOBILE_QUEUE_URL", "https://example.com/mobile")
-os.environ.setdefault("YOUTUBE_API_KEY", "")
+os.environ.setdefault("YOUTUBE_API", "")
 os.environ.setdefault("SUPABASE_URL", "")
 os.environ.setdefault("SUPABASE_ANON_KEY", "")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -87,24 +87,19 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["target"], "https://example.com/mobile")
 
-    def test_youtube_api_alias_is_supported(self):
-        original_key = os.environ.pop("YOUTUBE_API_KEY", None)
-        original_alias = os.environ.get("YOUTUBE_API")
+    def test_youtube_api_environment_variable_is_supported(self):
+        original_value = os.environ.get("YOUTUBE_API")
         os.environ["YOUTUBE_API"] = "legacy-test-key"
-        original_module_key = api.YOUTUBE_API_KEY
+        original_module_value = api.YOUTUBE_API
         try:
-            api.YOUTUBE_API_KEY = (
-                os.environ.get("YOUTUBE_API_KEY", "").strip()
-                or os.environ.get("YOUTUBE_API", "").strip()
-            )
-            self.assertEqual(api.YOUTUBE_API_KEY, "legacy-test-key")
+            api.YOUTUBE_API = os.environ.get("YOUTUBE_API", "").strip()
+            self.assertEqual(api.YOUTUBE_API, "legacy-test-key")
         finally:
-            api.YOUTUBE_API_KEY = original_module_key
-            os.environ.pop("YOUTUBE_API", None)
-            if original_alias is not None:
-                os.environ["YOUTUBE_API"] = original_alias
-            if original_key is not None:
-                os.environ["YOUTUBE_API_KEY"] = original_key
+            api.YOUTUBE_API = original_module_value
+            if original_value is None:
+                os.environ.pop("YOUTUBE_API", None)
+            else:
+                os.environ["YOUTUBE_API"] = original_value
 
     def test_queue_qr_replaces_local_target_on_deployed_host(self):
         original = api.MOBILE_QUEUE_URL
@@ -222,8 +217,8 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_missing_youtube_api_key(self):
-        original = api.YOUTUBE_API_KEY
-        api.YOUTUBE_API_KEY = ""
+        original = api.YOUTUBE_API
+        api.YOUTUBE_API = ""
         try:
             with patch.object(
                 api,
@@ -238,7 +233,7 @@ class ApiEndpointTests(unittest.TestCase):
             ):
                 response = self.client.get("/api/search?q=test")
         finally:
-            api.YOUTUBE_API_KEY = original
+            api.YOUTUBE_API = original
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()[0]["id"], "abc123")
 
@@ -317,13 +312,13 @@ class ApiEndpointTests(unittest.TestCase):
             def json(self):
                 raise ValueError("not json")
 
-        original = api.YOUTUBE_API_KEY
-        api.YOUTUBE_API_KEY = "test-key"
+        original = api.YOUTUBE_API
+        api.YOUTUBE_API = "test-key"
         try:
             with patch("api.index.requests.get", return_value=MalformedResponse()):
                 response = self.client.get("/api/search?q=test")
         finally:
-            api.YOUTUBE_API_KEY = original
+            api.YOUTUBE_API = original
 
         self.assertEqual(response.status_code, 502)
         self.assertEqual(
@@ -368,9 +363,9 @@ class ApiEndpointTests(unittest.TestCase):
                 with self.client.get(path) as response:
                     self.assertEqual(response.status_code, 200)
 
-    def test_mobile_template_uses_song_catalog_search(self):
+    def test_mobile_template_uses_server_search(self):
         template = (ROOT / "templates" / "mobile.html").read_text()
-        self.assertIn("fetch('/api/songs'", template)
+        self.assertIn("fetch(`/api/search?q=${encodeURIComponent(query)}`", template)
         self.assertNotIn("fetch(apiUrl)", template)
 
     def test_queue_read_returns_json(self):

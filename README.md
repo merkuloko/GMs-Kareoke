@@ -102,7 +102,7 @@ pip install -r requirements.txt
 3. Configure Environment Variables
 
 Create a .env file:
-YOUTUBE_API_KEY=your_youtube_api_key
+YOUTUBE_API=your_youtube_api_key
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your_anon_key
 MOBILE_QUEUE_URL=http://127.0.0.1:5000/mobile

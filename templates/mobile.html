@@ -34,7 +34,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
 body { background: #080808; color: white; font-family: 'Outfit', sans-serif; padding: 20px; }
-.search-box { display: flex; gap: 8px; margin-bottom: 15px; }
+.search-box { display: flex; gap: 8px; margin-bottom: 4px; }
+.search-status { min-height: 24px; color: #4169E1; font-size: 0.9em; padding: 4px 2px 10px; }
 input { flex: 1; padding: 12px; background: #1a1a1a; border: 1px solid #333; color: white; border-radius: 6px; }
 button { background: #4169E1; color: white; padding: 12px 20px; border: none; border-radius: 6px; font-weight: bold; }
 .result-item { display: flex; align-items: center; gap: 12px; background: #121212; padding: 10px; border: 1px solid #222; border-radius: 8px; margin-bottom: 10px; text-align: left; }
@@ -56,18 +57,32 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
 <input type="text" id="songQuery" placeholder="Search song or artist...">
 <button onclick="searchSongs()">SEARCH</button>
 </div>
+<div id="searchStatus" class="search-status" role="status" aria-live="polite"></div>
 <div id="results"></div>
 
 <script>
+    let scoringEnabled = true;
+    let queueSubmissionInProgress = false;
+
     window.onload = () => {
         const savedName = localStorage.getItem('karaoke_name');
         if (savedName) {
             document.getElementById('singerDisplay').textContent = savedName;
             document.getElementById('singerName').value = savedName;
         }
+        fetch('/api/config', { credentials: 'same-origin' })
+            .then((response) => response.ok ? response.json() : null)
+            .then((config) => {
+                if (config && typeof config.scoring_enabled === 'boolean') {
+                    scoringEnabled = config.scoring_enabled;
+                    document.getElementById('singerName').hidden = !scoringEnabled;
+                }
+            })
+            .catch(() => {});
     };
 
     function getSingerName() {
+        if (!scoringEnabled) return 'Guest';
         const nameInput = document.getElementById('singerName');
         const name = nameInput.value.trim();
         if (!name) {
@@ -102,16 +117,18 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
     async function searchSongs() {
         const query = document.getElementById('songQuery').value.trim();
         const resultsDiv = document.getElementById('results');
+        const searchStatus = document.getElementById('searchStatus');
         if (!query) return;
 
         resultsDiv.replaceChildren();
+        searchStatus.textContent = 'Searching...';
         const loading = document.createElement('div');
         loading.style.color = '#4169E1';
         loading.textContent = 'Loading song catalog...';
         resultsDiv.appendChild(loading);
 
         try {
-            const response = await fetch('/api/songs', {
+            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
                 credentials: 'same-origin'
             });
 
@@ -120,22 +137,17 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
                 throw new Error(data.error || 'Song catalog unavailable');
             }
 
-            const songs = await response.json();
-            const normalizedQuery = query.toLowerCase();
-            const data = songs
-                .filter((song) => {
-                    const searchable = `${song.title || ''} ${song.artist || ''}`.toLowerCase();
-                    return searchable.includes(normalizedQuery);
-                })
-                .map((song) => ({
-                    id: song.youtube_id || song.id,
-                    title: song.title || 'Untitled song',
-                    thumbnail: song.youtube_id
+            const data = (await response.json()).map((song) => ({
+                id: song.id || song.youtube_id,
+                title: song.title || 'Untitled song',
+                thumbnail: song.thumbnail || (
+                    song.youtube_id
                         ? `https://i.ytimg.com/vi/${encodeURIComponent(song.youtube_id)}/mqdefault.jpg`
                         : ''
-                }))
-                .filter((song) => song.id);
+                )
+            })).filter((song) => song.id);
             resultsDiv.replaceChildren();
+            searchStatus.textContent = '';
 
             if (data.length === 0) {
                 const empty = document.createElement('div');
@@ -163,14 +175,17 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
             });
         } catch (e) {
             console.error("Search Error:", e);
+            searchStatus.textContent = '';
             setStatus(getFriendlyError(e), true);
         }
     }
 
     async function addToQueue(videoId, title) {
+        if (queueSubmissionInProgress) return;
         const name = getSingerName();
         if (!name) return;
 
+        queueSubmissionInProgress = true;
         try {
             const response = await fetch('/api/live-queue', {
                 method: 'POST',
@@ -192,6 +207,8 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
             document.getElementById('songQuery').value = '';
         } catch (error) {
             setStatus('Error: ' + getFriendlyError(error), true);
+        } finally {
+            queueSubmissionInProgress = false;
         }
     }
 </script>

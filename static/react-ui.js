@@ -44,6 +44,7 @@ function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [songCatalog, setSongCatalog] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const [currentSong, setCurrentSong] = useState(DEFAULT_SONG);
   const [scoringEnabled, setScoringEnabled] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
@@ -59,6 +60,7 @@ function App() {
   const [submissionError, setSubmissionError] = useState('');
   const [isSubmittingScore, setIsSubmittingScore] = useState(false);
   const [completedResult, setCompletedResult] = useState(null);
+  const [queueSubmission, setQueueSubmission] = useState(false);
 
   const playerRef = useRef(null);
   const audioCtxRef = useRef(null);
@@ -115,6 +117,10 @@ function App() {
     finishedSongRef.current = completedSong.id;
     setIsPlaying(false);
     setIsSinging(false);
+    if (!scoringEnabledRef.current) {
+      advanceAfterCompletion();
+      return;
+    }
     setSingerName('');
     setSubmissionError('');
     setCompletedResult(null);
@@ -266,6 +272,9 @@ function App() {
 
       if (configResult.status === 'fulfilled') {
         const config = configResult.value;
+        if (typeof config.scoring_enabled === 'boolean') {
+          setScoringEnabled(config.scoring_enabled);
+        }
         setMobileQueueEnabled(Boolean(config && config.mobile_queue_enabled));
         if (config && config.mobile_queue_enabled && config.mobile_queue_url) {
           try {
@@ -332,7 +341,8 @@ function App() {
       return title.includes(queryLower) || artist.includes(queryLower);
     });
 
-    setStatusMessage('Searching...');
+    setIsSearching(true);
+    setStatusMessage('');
     try {
       const results = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
       let items = Array.isArray(results) ? results : [];
@@ -350,13 +360,17 @@ function App() {
       setSearchResults([]);
       setStatusMessage(
         error.message ||
-        'Live search is unavailable. Add YOUTUBE_API_KEY to .env and restart Flask.'
+        'Live search is unavailable. Add YOUTUBE_API to .env and restart Flask.'
       );
+    } finally {
+      setIsSearching(false);
     }
   }
 
   async function addSongToQueue(song) {
+    if (queueSubmission) return;
     const normalized = normalizeSong(song);
+    setQueueSubmission(true);
     try {
       await fetchJson('/api/live-queue', {
         method: 'POST',
@@ -367,7 +381,6 @@ function App() {
           singer_name: 'Guest',
         }),
       });
-      setQueue((prev) => [...prev, normalized]);
       setStatusMessage('Added to queue.');
       if (!currentSong || currentSong.id === DEFAULT_SONG.id) {
         setCurrentSong(normalized);
@@ -375,6 +388,8 @@ function App() {
       }
     } catch (error) {
       setStatusMessage(error.message || 'Unable to add song to queue.');
+    } finally {
+      setQueueSubmission(false);
     }
   }
 
@@ -481,8 +496,7 @@ function App() {
           React.createElement(
             'div',
             { className: 'session-meta' },
-            React.createElement('span', { className: 'live-badge' }, React.createElement('span', { className: 'live-dot' }), 'LIVE'),
-            React.createElement('span', { className: 'session-label' }, 'Friday night session')
+            React.createElement('span', { className: 'live-badge' }, React.createElement('span', { className: 'live-dot' }), 'LIVE')
           ),
           React.createElement('button', { className: 'info-button', onClick: () => setModalOpen(true) }, 'i'),
           React.createElement(
@@ -688,8 +702,9 @@ function App() {
                 if (event.key === 'Enter') handleSearch();
               },
             }),
-            React.createElement('button', { className: 'primary-button search-button', onClick: handleSearch }, '⌕')
+            React.createElement('button', { className: 'primary-button search-button', onClick: handleSearch, disabled: isSearching }, isSearching ? '…' : '⌕')
           ),
+          React.createElement('div', { className: 'search-status', role: 'status', 'aria-live': 'polite' }, isSearching ? 'Searching…' : ''),
           React.createElement(
             'div',
             { className: 'search-results' },

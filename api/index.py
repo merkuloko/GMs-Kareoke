@@ -60,10 +60,13 @@ SUPABASE_TABLE = os.environ.get("SUPABASE_SONGS_TABLE", "songs")
 SUPABASE_LEADERBOARD_TABLE = os.environ.get(
     "SUPABASE_LEADERBOARD_TABLE", "leaderboard_entries"
 )
-YOUTUBE_API_KEY = (
-    os.environ.get("YOUTUBE_API_KEY", "").strip()
-    or os.environ.get("YOUTUBE_API", "").strip()
-)
+YOUTUBE_API = os.environ.get("YOUTUBE_API", "").strip()
+SCORING_ENABLED = os.environ.get("SCORING_ENABLED", "true").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
 MOBILE_QUEUE_URL = os.environ.get("MOBILE_QUEUE_URL", "").strip()
 
 
@@ -506,7 +509,8 @@ def get_config():
             "mobile_queue_url": MOBILE_QUEUE_URL,
             "mobile_queue_enabled": bool(MOBILE_QUEUE_URL),
             "songs_backend": "supabase" if is_supabase_enabled() else "sqlite",
-            "youtube_configured": bool(YOUTUBE_API_KEY),
+            "youtube_configured": bool(YOUTUBE_API),
+            "scoring_enabled": SCORING_ENABLED,
             "write_auth_required": bool(get_write_secret()),
         }
     )
@@ -576,12 +580,12 @@ def search_youtube():
     if not query:
         return error_response("No query provided", 400)
 
-    if not YOUTUBE_API_KEY:
+    if not YOUTUBE_API:
         try:
             results = search_catalog(query)
             if not results:
                 return error_response(
-                    "No matching catalog songs found. Configure YOUTUBE_API_KEY "
+                    "No matching catalog songs found. Configure YOUTUBE_API "
                     "for live YouTube search.",
                     503,
                 )
@@ -594,7 +598,7 @@ def search_youtube():
         "q": f"{query} karaoke",
         "type": "video",
         "maxResults": 5,
-        "key": YOUTUBE_API_KEY,
+        "key": YOUTUBE_API,
     }
 
     try:
