@@ -558,6 +558,34 @@ function App() {
           )
         )
       ),
+          React.createElement(
+            'div',
+            { className: 'card side-panel' },
+            React.createElement(
+              'div',
+              { className: 'panel-header' },
+              React.createElement('div', { className: 'panel-title' }, 'Leaderboard'),
+              React.createElement('button', { className: 'small-button', onClick: clearLeaderboard }, 'Clear')
+            ),
+            React.createElement(
+              'div',
+              { className: 'list-stack' },
+              displayLeaderboard.length === 0
+                ? React.createElement('div', { className: 'empty-message' }, 'No scores yet')
+                : displayLeaderboard.map((entry, index) => React.createElement(
+                    'div',
+                    { key: `${entry.name}-${index}`, className: 'list-item' },
+                    React.createElement(
+                      'div',
+                      { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+                      React.createElement('span', { className: `rank ${index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : ''}` }, `#${index + 1}`),
+                      React.createElement('span', null, entry.name || 'Guest')
+                    ),
+                    React.createElement('strong', { style: { color: '#7dd3fc' } }, formatScore(entry.score || 0))
+                  ))
+            )
+          )
+        ),
         React.createElement(
           'main',
           { className: 'stage-column' },
