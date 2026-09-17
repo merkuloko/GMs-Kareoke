@@ -558,7 +558,10 @@ function App() {
           )
         )
       ),
-          React.createElement(
+      React.createElement(
+        'div',
+        { className: 'content-grid' },
+        React.createElement(
             'div',
             { className: 'card side-panel' },
             React.createElement(
@@ -943,7 +946,6 @@ function App() {
           )
         )
       )
-    )
   );
 }
 
