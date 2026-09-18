@@ -29,7 +29,7 @@ function roomUrl(path, roomId) {
 }
 
 function fetchJson(url, options = {}) {
-  return fetch(url, { credentials: 'same-origin', ...options }).then(async (response) => {
+  return fetch(url, { ...options, credentials: options.credentials || 'same-origin' }).then(async (response) => {
     let data = null;
     try {
       data = await response.json();
@@ -578,12 +578,23 @@ function App() {
   if (!sessionActive) {
     return React.createElement(
       'div',
-      { className: 'app-shell' },
+      {
+        className: 'app-shell',
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+          width: '100vw',
+          boxSizing: 'border-box',
+        },
+      },
       React.createElement(
         'div',
         {
           className: 'app-frame onboarding-frame',
-          style: { minHeight: 'calc(100vh - 68px)', display: 'grid', placeItems: 'center' },
+          style: { width: '100%', display: 'flex', justifyContent: 'center' },
         },
         React.createElement(
           'main',
