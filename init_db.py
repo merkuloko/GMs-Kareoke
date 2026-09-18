@@ -68,8 +68,57 @@ def init_db():
         )
         """
     )
+    cursor.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS live_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room_id TEXT NOT NULL,
+            youtube_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            singer_name TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            is_played INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_live_queue_room_id
+            ON live_queue (room_id, created_at);
+        CREATE TABLE IF NOT EXISTS leaderboard (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room_id TEXT NOT NULL,
+            singer_name TEXT NOT NULL,
+            score INTEGER NOT NULL,
+            song_title TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_leaderboard_room_id
+            ON leaderboard (room_id, score DESC, created_at);
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room_id TEXT NOT NULL,
+            setting_key TEXT NOT NULL,
+            setting_value TEXT NOT NULL,
+            UNIQUE (room_id, setting_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_settings_room_id
+            ON settings (room_id);
+        """
+    )
 
     cursor.execute("DELETE FROM songs")
+
+    lifetime_map = json.dumps(
+        [
+            {"start": 15.0, "end": 45.0, "label": "Verse 1"},
+            {"start": 60.0, "end": 90.0, "label": "Chorus 1"},
+            {"start": 105.0, "end": 135.0, "label": "Verse 2"},
+            {"start": 150.0, "end": 180.0, "label": "Chorus 2"},
+            {"start": 195.0, "end": 225.0, "label": "Bridge"},
+            {"start": 240.0, "end": 280.0, "label": "Outro"},
+        ]
+    )
+
+    songs_data = [
+        ("LIFETIME - Reimagined", "BEN&BEN", "BhSZGUXeY6Q", lifetime_map),
+    ]
 
     cursor.executemany(
         """

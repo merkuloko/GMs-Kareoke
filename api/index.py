@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -80,6 +81,7 @@ SCORING_ENABLED = os.environ.get("SCORING_ENABLED", "true").strip().lower() not 
     "off",
 }
 MOBILE_QUEUE_URL = os.environ.get("MOBILE_QUEUE_URL", "").strip()
+ROOM_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{5,32}$")
 QUEUE_RATE_LIMIT = 10
 QUEUE_RATE_WINDOW_SECONDS = 60
 queue_rate_state = {}
@@ -187,6 +189,20 @@ def get_json_body(required_fields=None):
             if value is None or (isinstance(value, str) and not value.strip()):
                 raise ValueError(f"Missing or empty field: {field}")
     return payload
+
+
+def require_room_id(value):
+    room_id = str(value or "").strip()
+    if not ROOM_ID_PATTERN.fullmatch(room_id):
+        raise ValueError("room_id must be 5-32 letters, numbers, hyphens, or underscores")
+    return room_id
+
+
+def room_id_from_query():
+    try:
+        return require_room_id(request.args.get("room_id"))
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def check_queue_rate_limit():
@@ -386,18 +402,32 @@ def fetch_song_by_id(song_id):
     return normalize_song(dict(song)) if song else None
 
 
-def fetch_leaderboard():
+def fetch_leaderboard(room_id):
     try:
-        if not is_supabase_enabled():
-            return []
-
-        data = supabase_request(
-            "GET",
-            SUPABASE_LEADERBOARD_TABLE,
-            "select=id,singer_name,score,song_title,created_at"
-            "&order=score.desc,created_at.asc"
-            "&limit=5",
-        )
+        if is_supabase_enabled():
+            data = supabase_request(
+                "GET",
+                SUPABASE_LEADERBOARD_TABLE,
+                "select=id,singer_name,score,song_title,created_at"
+                f"&room_id=eq.{quote_plus(room_id)}&order=score.desc,created_at.asc"
+                "&limit=5",
+            )
+        else:
+            conn = get_db_connection()
+            if conn is None:
+                return []
+            rows = conn.execute(
+                """
+                SELECT id, singer_name, score, song_title, created_at
+                FROM leaderboard
+                WHERE room_id = ?
+                ORDER BY score DESC, created_at ASC
+                LIMIT 5
+                """,
+                (room_id,),
+            ).fetchall()
+            conn.close()
+            data = [dict(row) for row in rows]
 
         return [
             {
@@ -420,6 +450,7 @@ def create_leaderboard_entry(payload):
     singer_name = (payload.get("name") or "").strip()[:15] or "Anonymous Singer"
     score = payload.get("score", 0)
     song_title = (payload.get("song_title") or "").strip() or "Karaoke Song"
+    room_id = require_room_id(payload.get("room_id"))
 
     try:
         score = int(score)
@@ -429,19 +460,33 @@ def create_leaderboard_entry(payload):
     if score < 0:
         raise ValueError("Score must be zero or greater")
 
-    if not is_supabase_enabled():
-        raise RuntimeError("Supabase is not configured")
-
-    data = supabase_request(
-        "POST",
-        SUPABASE_LEADERBOARD_TABLE,
-        payload={
-            "singer_name": singer_name,
-            "score": score,
-            "song_title": song_title,
-        },
-        prefer="return=representation",
-    )
+    if is_supabase_enabled():
+        data = supabase_request(
+            "POST",
+            SUPABASE_LEADERBOARD_TABLE,
+            payload={
+                "room_id": room_id,
+                "singer_name": singer_name,
+                "score": score,
+                "song_title": song_title,
+            },
+            prefer="return=representation",
+        )
+    else:
+        conn = get_db_connection()
+        if conn is None:
+            raise RuntimeError("No queue database is configured")
+        cursor = conn.execute(
+            """
+            INSERT INTO leaderboard (room_id, singer_name, score, song_title)
+            VALUES (?, ?, ?, ?)
+            """,
+            (room_id, singer_name, score, song_title),
+        )
+        conn.commit()
+        entry_id = cursor.lastrowid
+        conn.close()
+        data = [{"id": entry_id}]
 
     return {
         "id": data[0]["id"] if data else None,
@@ -451,17 +496,22 @@ def create_leaderboard_entry(payload):
     }
 
 
-def clear_leaderboard():
-    if not is_supabase_enabled():
-        return None
-
+def clear_leaderboard(room_id):
     try:
-        return supabase_request(
-            "DELETE",
-            SUPABASE_LEADERBOARD_TABLE,
-            "id=gt.0",
-            prefer="return=minimal",
-        )
+        if is_supabase_enabled():
+            return supabase_request(
+                "DELETE",
+                SUPABASE_LEADERBOARD_TABLE,
+                f"room_id=eq.{quote_plus(room_id)}",
+                prefer="return=minimal",
+            )
+        conn = get_db_connection()
+        if conn is None:
+            return None
+        conn.execute("DELETE FROM leaderboard WHERE room_id = ?", (room_id,))
+        conn.commit()
+        conn.close()
+        return None
     except (RuntimeError, requests.RequestException):
         return None
 
@@ -498,7 +548,8 @@ def app_icon():
 @require_configured_write_auth
 def reorder_live_queue():
     try:
-        data = get_json_body(["item_ids"])
+        data = get_json_body(["room_id", "item_ids"])
+        room_id = require_room_id(data["room_id"])
     except ValueError as exc:
         return error_response(str(exc), 400)
 
@@ -520,7 +571,7 @@ def reorder_live_queue():
             supabase_request(
                 "PATCH",
                 "live_queue",
-                query_string=f"id=eq.{item_id}",
+                query_string=f"id=eq.{item_id}&room_id=eq.{quote_plus(room_id)}",
                 payload={
                     "created_at": (start_time + timedelta(milliseconds=index)).isoformat()
                 },
@@ -543,13 +594,17 @@ def manage_queue_item(item_id):
         item_id = int(item_id)
     except (TypeError, ValueError):
         return error_response("Invalid queue item id", 400)
+    try:
+        room_id = room_id_from_query()
+    except ValueError as exc:
+        return error_response(str(exc), 400)
 
     try:
         if request.method == "DELETE":
             supabase_request(
                 "DELETE",
                 "live_queue",
-                query_string=f"id=eq.{item_id}",
+                query_string=f"id=eq.{item_id}&room_id=eq.{quote_plus(room_id)}",
                 prefer="return=minimal",
             )
             return jsonify({"message": "Queue item removed"}), 200
@@ -557,7 +612,7 @@ def manage_queue_item(item_id):
         supabase_request(
             "PATCH",
             "live_queue",
-            query_string=f"id=eq.{item_id}",
+            query_string=f"id=eq.{item_id}&room_id=eq.{quote_plus(room_id)}",
             payload={"is_played": True},
         )
         return jsonify({"message": "Success"}), 200
@@ -570,8 +625,13 @@ def manage_queue_item(item_id):
 
 
 @app.route("/mobile")
-def mobile_queue():
-    response = app.make_response(render_template("mobile.html"))
+@app.route("/join/<room_id>")
+def mobile_queue(room_id=None):
+    try:
+        room_id = require_room_id(room_id or request.args.get("room_id"))
+    except ValueError:
+        return error_response("A valid room_id is required", 400)
+    response = app.make_response(render_template("mobile.html", room_id=room_id))
     if get_write_secret():
         response.set_cookie(
             "karaoke_write_token",
@@ -584,17 +644,119 @@ def mobile_queue():
     return response
 
 
-@app.route("/api/config")
+@app.route("/api/config", methods=["POST"])
+@require_configured_write_auth
+def update_config():
+    try:
+        data = get_json_body(["room_id"])
+        room_id = require_room_id(data["room_id"])
+        settings = data.get("settings")
+        if not isinstance(settings, dict) or not settings:
+            raise ValueError("settings must be a non-empty object")
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+
+    try:
+        if is_supabase_enabled():
+            rows = [
+                {
+                    "room_id": room_id,
+                    "setting_key": str(key).strip(),
+                    "setting_value": json.dumps(value),
+                }
+                for key, value in settings.items()
+                if str(key).strip()
+            ]
+            if not rows:
+                return error_response("settings must contain valid keys", 400)
+            supabase_request(
+                "POST",
+                "settings",
+                payload=rows,
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
+        else:
+            conn = get_db_connection()
+            if conn is None:
+                return error_response("Settings service is not configured", 503)
+            conn.executemany(
+                """
+                INSERT INTO settings (room_id, setting_key, setting_value)
+                VALUES (?, ?, ?)
+                ON CONFLICT(room_id, setting_key)
+                DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                [
+                    (room_id, str(key).strip(), json.dumps(value))
+                    for key, value in settings.items()
+                    if str(key).strip()
+                ],
+            )
+            conn.commit()
+            conn.close()
+        return jsonify({"room_id": room_id, "settings": settings}), 200
+    except RuntimeError as exc:
+        return error_response(str(exc), 503)
+    except (requests.RequestException, sqlite3.Error):
+        return error_response("Settings service unavailable", 503)
+
+
+@app.route("/api/config", methods=["GET"])
 def get_config():
+    try:
+        room_id = room_id_from_query()
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    room_settings = {}
+    try:
+        if is_supabase_enabled():
+            rows = supabase_request(
+                "GET",
+                "settings",
+                f"select=setting_key,setting_value&room_id=eq.{quote_plus(room_id)}",
+            )
+            room_settings = {
+                row["setting_key"]: json.loads(row["setting_value"])
+                for row in rows or []
+                if row.get("setting_key")
+            }
+        else:
+            conn = get_db_connection()
+            if conn is not None:
+                rows = conn.execute(
+                    """
+                    SELECT setting_key, setting_value
+                    FROM settings
+                    WHERE room_id = ?
+                    """,
+                    (room_id,),
+                ).fetchall()
+                conn.close()
+                room_settings = {
+                    row["setting_key"]: json.loads(row["setting_value"])
+                    for row in rows
+                    if row["setting_key"]
+                }
+    except sqlite3.OperationalError:
+        room_settings = {}
+    except (RuntimeError, requests.RequestException, sqlite3.Error, json.JSONDecodeError, TypeError):
+        return error_response("Settings service unavailable", 503)
+
+    scoring_enabled = room_settings.get("scoring_enabled", SCORING_ENABLED)
+    if not isinstance(scoring_enabled, bool):
+        scoring_enabled = SCORING_ENABLED
+
     return jsonify(
         {
+            "room_id": room_id,
             "supabase_enabled": is_supabase_enabled(),
             "mobile_queue_url": MOBILE_QUEUE_URL,
             "mobile_queue_enabled": bool(MOBILE_QUEUE_URL),
             "songs_backend": "supabase" if is_supabase_enabled() else "sqlite",
             "youtube_configured": bool(YOUTUBE_API),
-            "scoring_enabled": SCORING_ENABLED,
+            "scoring_enabled": scoring_enabled,
             "write_auth_required": bool(get_write_secret()),
+            "settings": room_settings,
         }
     )
 
@@ -726,7 +888,11 @@ def search_youtube():
 @app.route("/api/leaderboard", methods=["GET"])
 def get_leaderboard():
     try:
-        return jsonify(fetch_leaderboard())
+        room_id = room_id_from_query()
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    try:
+        return jsonify(fetch_leaderboard(room_id))
     except RuntimeError as error:
         return error_response(str(error), 500)
     except requests.RequestException:
@@ -738,6 +904,7 @@ def get_leaderboard():
 def save_score():
     try:
         data = get_json_body()
+        data["room_id"] = require_room_id(data.get("room_id"))
     except ValueError as exc:
         return error_response(str(exc), 400)
 
@@ -757,7 +924,11 @@ def save_score():
 @require_configured_write_auth
 def delete_leaderboard():
     try:
-        clear_leaderboard()
+        room_id = room_id_from_query()
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    try:
+        clear_leaderboard(room_id)
     except RuntimeError as error:
         return error_response(str(error), 500)
     except requests.RequestException:
@@ -768,9 +939,15 @@ def delete_leaderboard():
 
 @app.route("/api/queue-qr")
 def queue_qr():
-    mobile_queue_url = get_mobile_queue_url()
-    if not mobile_queue_url:
+    try:
+        room_id = room_id_from_query()
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    configured_mobile_url = get_mobile_queue_url().rstrip("/")
+    if not configured_mobile_url:
         return error_response("Mobile queue URL not configured", 404)
+    mobile_base = configured_mobile_url[:-7] if configured_mobile_url.endswith("/mobile") else configured_mobile_url
+    mobile_queue_url = f"{mobile_base}/join/{quote_plus(room_id)}"
 
     qr_url = (
         "https://api.qrserver.com/v1/create-qr-code/"
@@ -782,14 +959,31 @@ def queue_qr():
 @app.route("/api/live-queue", methods=["GET"])
 def get_live_queue():
     try:
-        if not is_supabase_enabled():
-            return jsonify([])
-
-        data = supabase_request(
-            "GET",
-            "live_queue",
-            "select=id,youtube_id,title,singer_name,created_at&order=created_at.asc,id.asc",
-        )
+        room_id = room_id_from_query()
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    try:
+        if is_supabase_enabled():
+            data = supabase_request(
+                "GET",
+                "live_queue",
+                f"select=id,room_id,youtube_id,title,singer_name,created_at&room_id=eq.{quote_plus(room_id)}&order=created_at.asc,id.asc",
+            )
+        else:
+            conn = get_db_connection()
+            if conn is None:
+                return jsonify([])
+            rows = conn.execute(
+                """
+                SELECT id, room_id, youtube_id, title, singer_name, created_at
+                FROM live_queue
+                WHERE room_id = ? AND is_played = 0
+                ORDER BY created_at ASC, id ASC
+                """,
+                (room_id,),
+            ).fetchall()
+            conn.close()
+            data = [dict(row) for row in rows]
         return jsonify(
             [
                 {
@@ -803,7 +997,7 @@ def get_live_queue():
                 for item in data or []
             ]
         )
-    except (RuntimeError, requests.RequestException):
+    except (RuntimeError, requests.RequestException, sqlite3.Error):
         return error_response("Queue service unavailable", 503)
 
 
@@ -814,7 +1008,8 @@ def add_to_queue():
         return error_response("Too many queue requests. Try again later.", 429)
 
     try:
-        data = get_json_body(["youtube_id", "title", "singer_name"])
+        data = get_json_body(["room_id", "youtube_id", "title", "singer_name"])
+        room_id = require_room_id(data["room_id"])
     except ValueError as exc:
         return error_response(str(exc), 400)
 
@@ -828,16 +1023,32 @@ def add_to_queue():
         return error_response("Song details are too long", 400)
 
     try:
-        supabase_request(
-            "POST",
-            "live_queue",
-            payload={
-                "youtube_id": video_id,
-                "title": title,
-                "singer_name": singer_name,
-            },
-            prefer="return=minimal",
-        )
+        payload = {
+            "room_id": room_id,
+            "youtube_id": video_id,
+            "title": title,
+            "singer_name": singer_name,
+        }
+        if is_supabase_enabled():
+            supabase_request(
+                "POST",
+                "live_queue",
+                payload=payload,
+                prefer="return=minimal",
+            )
+        else:
+            conn = get_db_connection()
+            if conn is None:
+                return error_response("Queue service is not configured", 503)
+            conn.execute(
+                """
+                INSERT INTO live_queue (room_id, youtube_id, title, singer_name)
+                VALUES (?, ?, ?, ?)
+                """,
+                (room_id, video_id, title, singer_name),
+            )
+            conn.commit()
+            conn.close()
         return jsonify({"message": "Success"}), 200
     except RuntimeError:
         return error_response("Queue service is not configured", 503)
@@ -852,14 +1063,23 @@ def add_to_queue():
 @require_configured_write_auth
 def clear_live_queue():
     try:
-        if not is_supabase_enabled():
-            return jsonify({"message": "Queue cleared"}), 200
-        supabase_request(
-            "DELETE",
-            "live_queue",
-            query_string="id=gt.0",
-            prefer="return=minimal",
-        )
+        room_id = room_id_from_query()
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    try:
+        if is_supabase_enabled():
+            supabase_request(
+                "DELETE",
+                "live_queue",
+                query_string=f"room_id=eq.{quote_plus(room_id)}",
+                prefer="return=minimal",
+            )
+        else:
+            conn = get_db_connection()
+            if conn is not None:
+                conn.execute("DELETE FROM live_queue WHERE room_id = ?", (room_id,))
+                conn.commit()
+                conn.close()
         return jsonify({"message": "Queue cleared"}), 200
     except RuntimeError as exc:
         return error_response(str(exc), 503)

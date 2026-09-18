@@ -61,6 +61,7 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
 <div id="results"></div>
 
 <script>
+    const roomId = {{ room_id|tojson }};
     let scoringEnabled = true;
     let queueSubmissionInProgress = false;
 
@@ -70,7 +71,7 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
             document.getElementById('singerDisplay').textContent = savedName;
             document.getElementById('singerName').value = savedName;
         }
-        fetch('/api/config', { credentials: 'same-origin' })
+        fetch(`/api/config?room_id=${encodeURIComponent(roomId)}`, { credentials: 'same-origin' })
             .then((response) => response.ok ? response.json() : null)
             .then((config) => {
                 if (config && typeof config.scoring_enabled === 'boolean') {
@@ -127,7 +128,7 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
         resultsDiv.appendChild(loading);
 
         try {
-            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&room_id=${encodeURIComponent(roomId)}`, {
                 credentials: 'same-origin'
             });
 
@@ -192,7 +193,8 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
                 body: JSON.stringify({
                     youtube_id: videoId,
                     title: title,
-                    singer_name: name
+                    singer_name: name,
+                    room_id: roomId
                 })
             });
 

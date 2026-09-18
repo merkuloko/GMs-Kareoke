@@ -63,6 +63,32 @@ Notes:
 - Use the project API URL from `Project Settings -> API`, not the dashboard URL.
 - Do not commit real Supabase keys into `.env.example` or your repo.
 
+## Room ID migration
+
+Run this migration once before deploying the multi-room host and guest clients. Existing
+rows receive a temporary `LEGACY` room; new requests always provide a validated room ID.
+
+```sql
+alter table public.live_queue add column if not exists room_id text;
+alter table public.leaderboard_entries add column if not exists room_id text;
+alter table public.settings add column if not exists room_id text;
+
+update public.live_queue set room_id = 'LEGACY' where room_id is null;
+update public.leaderboard_entries set room_id = 'LEGACY' where room_id is null;
+update public.settings set room_id = 'LEGACY' where room_id is null;
+
+alter table public.live_queue alter column room_id set not null;
+alter table public.leaderboard_entries alter column room_id set not null;
+alter table public.settings alter column room_id set not null;
+
+create index if not exists live_queue_room_id_idx
+  on public.live_queue (room_id, created_at);
+create index if not exists leaderboard_entries_room_id_idx
+  on public.leaderboard_entries (room_id, score desc, created_at);
+create index if not exists settings_room_id_idx
+  on public.settings (room_id);
+```
+
 Troubleshooting the song catalog:
 
 - `GET /api/songs` uses `SUPABASE_SONGS_TABLE` when Supabase credentials are configured.

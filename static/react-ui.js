@@ -6,6 +6,27 @@ const DEFAULT_SONG = {
   artist: '',
   rhythm_map: [],
 };
+const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const roomStorageKey = 'karaoke_room_id';
+function generateRoomId() {
+  return Array.from(
+    { length: 5 },
+    () => ROOM_ALPHABET[Math.floor(Math.random() * ROOM_ALPHABET.length)]
+  ).join('');
+}
+
+function getStoredRoomId() {
+  const existing = window.localStorage.getItem(roomStorageKey);
+  if (existing && /^[A-Z0-9]{5}$/.test(existing)) return existing;
+  const generated = generateRoomId();
+  window.localStorage.setItem(roomStorageKey, generated);
+  return generated;
+}
+
+function roomUrl(path, roomId) {
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}room_id=${encodeURIComponent(roomId)}`;
+}
 
 function fetchJson(url, options = {}) {
   return fetch(url, { credentials: 'same-origin', ...options }).then(async (response) => {
@@ -39,6 +60,7 @@ function normalizeSong(song) {
 }
 
 function App() {
+  const [roomId] = useState(getStoredRoomId);
   const [score, setScore] = useState(0);
   const [leaderboard, setLeaderboard] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -171,10 +193,11 @@ function App() {
       name,
       score: songFinished.score,
       song_title: songFinished.song.title,
+      room_id: roomId,
     };
 
     try {
-      const entry = await fetchJson('/api/leaderboard', {
+      const entry = await fetchJson(roomUrl('/api/leaderboard', roomId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -236,7 +259,7 @@ function App() {
   useEffect(() => {
     async function loadLiveQueue() {
       try {
-        const items = await fetchJson('/api/live-queue');
+        const items = await fetchJson(roomUrl('/api/live-queue', roomId));
         if (!Array.isArray(items)) return;
         setQueue(items.map((item) => normalizeSong({
           ...item,
@@ -250,9 +273,9 @@ function App() {
 
     async function loadInitialData() {
       const [configResult, songsResult, leaderboardResult] = await Promise.allSettled([
-        fetchJson('/api/config'),
+        fetchJson(roomUrl('/api/config', roomId)),
         fetchJson('/api/songs'),
-        fetchJson('/api/leaderboard'),
+        fetchJson(roomUrl('/api/leaderboard', roomId)),
       ]);
 
       if (songsResult.status === 'fulfilled') {
@@ -280,7 +303,7 @@ function App() {
         setMobileQueueEnabled(Boolean(config && config.mobile_queue_enabled));
         if (config && config.mobile_queue_enabled && config.mobile_queue_url) {
           try {
-            const qrResult = await fetchJson('/api/queue-qr');
+            const qrResult = await fetchJson(roomUrl('/api/queue-qr', roomId));
             setQrUrl(qrResult && qrResult.url ? qrResult.url : '');
           } catch (error) {
             setStatusMessage('Mobile queue QR is unavailable.');
@@ -346,7 +369,7 @@ function App() {
     setIsSearching(true);
     setStatusMessage('');
     try {
-      const results = await fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
+      const results = await fetchJson(roomUrl(`/api/search?q=${encodeURIComponent(query)}`, roomId));
       let items = Array.isArray(results) ? results : [];
       if (!items.length && fallbackCatalogMatches.length) {
         items = fallbackCatalogMatches;
@@ -381,6 +404,7 @@ function App() {
           youtube_id: normalized.id,
           title: normalized.title,
           singer_name: 'Guest',
+          room_id: roomId,
         }),
       });
       setStatusMessage('Added to queue.');
@@ -403,7 +427,7 @@ function App() {
     }
 
     try {
-      await fetchJson(`/api/live-queue/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+      await fetchJson(roomUrl(`/api/live-queue/${encodeURIComponent(itemId)}`, roomId), { method: 'DELETE' });
       setQueue((previous) => previous.filter((item) => String(item.db_id || item.id) !== String(itemId)));
       setStatusMessage('Song removed from queue.');
     } catch (error) {
@@ -424,11 +448,12 @@ function App() {
     setDraggedQueueId(null);
 
     try {
-      await fetchJson('/api/live-queue/reorder', {
+      await fetchJson(roomUrl('/api/live-queue/reorder', roomId), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           item_ids: nextQueue.map((song) => song.db_id || song.id),
+          room_id: roomId,
         }),
       });
       setStatusMessage('Queue order saved.');
@@ -440,7 +465,7 @@ function App() {
 
   async function clearQueue() {
     try {
-      await fetchJson('/api/live-queue', { method: 'DELETE' });
+      await fetchJson(roomUrl('/api/live-queue', roomId), { method: 'DELETE' });
       setQueue([]);
       setStatusMessage('Queue cleared.');
     } catch (error) {
@@ -450,7 +475,7 @@ function App() {
 
   async function clearLeaderboard() {
     try {
-      await fetchJson('/api/leaderboard', { method: 'DELETE' });
+      await fetchJson(roomUrl('/api/leaderboard', roomId), { method: 'DELETE' });
       setLeaderboard([]);
       setStatusMessage('Leaderboard cleared.');
     } catch (error) {
@@ -541,8 +566,9 @@ function App() {
           React.createElement(
             'div',
             { className: 'session-meta' },
-            React.createElement('span', { className: 'live-badge' }, React.createElement('span', { className: 'live-dot' }), 'LIVE')
-          ),
+              React.createElement('span', { className: 'live-badge' }, React.createElement('span', { className: 'live-dot' }), 'LIVE'),
+              React.createElement('span', { className: 'room-indicator' }, `Room: ${roomId}`)
+            ),
           React.createElement('button', { className: 'info-button', onClick: () => setModalOpen(true) }, 'i'),
           React.createElement(
             'div',

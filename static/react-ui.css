@@ -948,6 +948,14 @@ button:hover {
   letter-spacing: .08em;
 }
 
+.room-indicator {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+
 .live-dot,
 .state-dot {
   width: 6px;
