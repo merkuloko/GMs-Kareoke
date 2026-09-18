@@ -60,7 +60,9 @@ function normalizeSong(song) {
 }
 
 function App() {
-  const [roomId] = useState(getStoredRoomId);
+  const [roomId, setRoomId] = useState(getStoredRoomId);
+  const [sessionActive, setSessionActive] = useState(false);
+  const [existingRoomInput, setExistingRoomInput] = useState('');
   const [score, setScore] = useState(0);
   const [leaderboard, setLeaderboard] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -253,10 +255,14 @@ function App() {
     window.onYouTubeIframeAPIReady = function() {
       ensurePlayer();
     };
+    if (!sessionActive) return undefined;
     ensurePlayer();
-  }, [currentSong.id]);
+    return undefined;
+  }, [currentSong.id, sessionActive]);
 
   useEffect(() => {
+    if (!sessionActive) return undefined;
+
     async function loadLiveQueue() {
       try {
         const items = await fetchJson(roomUrl('/api/live-queue', roomId));
@@ -317,7 +323,7 @@ function App() {
     loadInitialData();
     const queueTimer = window.setInterval(loadLiveQueue, 5000);
     return () => window.clearInterval(queueTimer);
-  }, []);
+  }, [roomId, sessionActive]);
 
   useEffect(() => {
     const analyser = analyserRef.current;
@@ -394,15 +400,25 @@ function App() {
 
   async function addSongToQueue(song) {
     if (queueSubmissionRef.current) return;
-    const normalized = normalizeSong(song);
+    const videoId = String(song?.youtube_id || song?.id || '').trim();
+    const title = String(song?.title || '').trim();
+    if (!videoId || !title) {
+      setStatusMessage('This search result is missing a song ID or title.');
+      return;
+    }
+    const normalized = normalizeSong({
+      ...song,
+      youtube_id: videoId,
+      title,
+    });
     queueSubmissionRef.current = true;
     try {
-      await fetchJson('/api/live-queue', {
+      await fetchJson(roomUrl('/api/live-queue', roomId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          youtube_id: normalized.id,
-          title: normalized.title,
+          youtube_id: videoId,
+          title,
           singer_name: 'Guest',
           room_id: roomId,
         }),
@@ -543,6 +559,70 @@ function App() {
     setCurrentSong(nextSong);
     setSongPickerText(nextSong.title);
     updatePlayerVideo(nextSong.id);
+  }
+
+  function startNewSession() {
+    const nextRoomId = generateRoomId();
+    setRoomId(nextRoomId);
+    window.localStorage.setItem(roomStorageKey, nextRoomId);
+  }
+
+  function resumeSession() {
+    const nextRoomId = existingRoomInput.trim().toUpperCase();
+    if (!/^[A-Z0-9]{5}$/.test(nextRoomId)) return;
+    setRoomId(nextRoomId);
+    window.localStorage.setItem(roomStorageKey, nextRoomId);
+    setSessionActive(true);
+  }
+
+  if (!sessionActive) {
+    return React.createElement(
+      'div',
+      { className: 'app-shell' },
+      React.createElement(
+        'div',
+        {
+          className: 'app-frame onboarding-frame',
+          style: { minHeight: 'calc(100vh - 68px)', display: 'grid', placeItems: 'center' },
+        },
+        React.createElement(
+          'main',
+          {
+            className: 'onboarding-card card',
+            style: { width: 'min(100%, 520px)', padding: '42px', textAlign: 'center' },
+          },
+          React.createElement('div', { className: 'brand-mark onboarding-mark' }),
+          React.createElement('div', { className: 'eyebrow' }, 'Host console'),
+          React.createElement('h1', null, 'Start a karaoke session'),
+          React.createElement('p', { className: 'panel-subtitle' }, 'Create a room or resume an existing room code to begin hosting.'),
+          React.createElement(
+            'div',
+            {
+              className: 'onboarding-room',
+              style: { margin: '28px 0 20px', padding: '18px', border: '1px solid var(--border)', borderRadius: '16px' },
+            },
+            React.createElement('span', { className: 'eyebrow' }, 'Your room code'),
+            React.createElement('strong', null, roomId)
+          ),
+          React.createElement('button', { className: 'primary-button', onClick: startNewSession }, 'Generate new code'),
+          React.createElement('button', { className: 'primary-button onboarding-start', onClick: () => setSessionActive(true) }, 'Start hosting'),
+          React.createElement('div', { className: 'onboarding-divider' }, 'or resume a session'),
+          React.createElement('input', {
+            className: 'search-input',
+            value: existingRoomInput,
+            maxLength: 5,
+            onChange: (event) => setExistingRoomInput(event.target.value.toUpperCase()),
+            placeholder: 'Enter 5-character room code',
+            'aria-label': 'Existing room code',
+          }),
+          React.createElement('button', {
+            className: 'secondary-button',
+            onClick: resumeSession,
+            disabled: !/^[A-Z0-9]{5}$/.test(existingRoomInput.trim().toUpperCase()),
+          }, 'Resume session')
+        )
+      )
+    );
   }
 
   return React.createElement(

@@ -189,6 +189,7 @@ button { background: #4169E1; color: white; padding: 12px 20px; border: none; bo
         try {
             const response = await fetch('/api/live-queue', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     youtube_id: videoId,
