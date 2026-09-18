@@ -17,6 +17,19 @@ class ReactUiContractTests(unittest.TestCase):
         self.assertIn("method: 'DELETE'", UI_SOURCE)
         self.assertIn("roomUrl(`/api/live-queue/${encodeURIComponent(next.db_id)}`, roomId)", UI_SOURCE)
 
+    def test_idle_add_starts_song_immediately(self):
+        self.assertIn("const playerIsIdle = !currentSongRef.current.id && !isPlaying;", UI_SOURCE)
+        self.assertIn("playerRef.current.loadVideoById({ videoId: normalized.id, startSeconds: 0 });", UI_SOURCE)
+        self.assertIn("setIsPlaying(true);", UI_SOURCE)
+
+    def test_onboarding_requires_device_selection_and_tv_disables_scoring_controls(self):
+        self.assertIn("const [deviceType, setDeviceType] = useState(null);", UI_SOURCE)
+        self.assertIn("How are you using GM's Karaoke today?", UI_SOURCE)
+        self.assertIn("window.location.href = '/mobile'", UI_SOURCE)
+        self.assertIn("deviceType === 'tv'", UI_SOURCE)
+        self.assertIn("deviceType !== 'tv'", UI_SOURCE)
+        self.assertIn("if (deviceType !== 'tv' && typeof config.scoring_enabled === 'boolean')", UI_SOURCE)
+
     def test_empty_song_does_not_create_youtube_video(self):
         self.assertIn("style: currentSong.id ? undefined : { display: 'none' }", UI_SOURCE)
 

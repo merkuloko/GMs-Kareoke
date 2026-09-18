@@ -61,6 +61,7 @@ function normalizeSong(song) {
 
 function App() {
   const [roomId, setRoomId] = useState(getStoredRoomId);
+  const [deviceType, setDeviceType] = useState(null);
   const [sessionActive, setSessionActive] = useState(false);
   const [existingRoomInput, setExistingRoomInput] = useState('');
   const [score, setScore] = useState(0);
@@ -109,6 +110,13 @@ function App() {
     queueRef.current = queue;
     scoringEnabledRef.current = scoringEnabled;
   }, [score, currentSong, queue, scoringEnabled]);
+
+  useEffect(() => {
+    if (deviceType === 'tv') {
+      setScoringEnabled(false);
+      setMicActive(false);
+    }
+  }, [deviceType]);
 
   useEffect(() => () => {
     if (advanceTimerRef.current) window.clearTimeout(advanceTimerRef.current);
@@ -165,6 +173,10 @@ function App() {
       scoreRef.current = 0;
       setScore(0);
       finishedSongRef.current = null;
+      setIsPlaying(true);
+      setSongFinished(null);
+      setCompletedResult(null);
+      setModalOpen(false);
       if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
         playerRef.current.loadVideoById({ videoId: next.id, startSeconds: 0 });
       }
@@ -181,6 +193,8 @@ function App() {
       setStatusMessage('Song saved. Queue is ready for the next singer.');
       setScore(0);
       finishedSongRef.current = null;
+      setIsPlaying(false);
+      setModalOpen(false);
     }
     setSongFinished(null);
     setCompletedResult(null);
@@ -246,6 +260,10 @@ function App() {
         onReady: () => {
           playerRef.current = player;
           setIsPlaying(false);
+          if (currentSongRef.current.id) {
+            player.loadVideoById({ videoId: currentSongRef.current.id, startSeconds: 0 });
+            setIsPlaying(true);
+          }
           setCurrentSong((song) => ({ ...song }));
         },
         onStateChange: (event) => {
@@ -316,7 +334,7 @@ function App() {
 
       if (configResult.status === 'fulfilled') {
         const config = configResult.value;
-        if (typeof config.scoring_enabled === 'boolean') {
+        if (deviceType !== 'tv' && typeof config.scoring_enabled === 'boolean') {
           setScoringEnabled(config.scoring_enabled);
         }
         setMobileQueueEnabled(Boolean(config && config.mobile_queue_enabled));
@@ -336,7 +354,7 @@ function App() {
     loadInitialData();
     const queueTimer = window.setInterval(loadLiveQueue, 5000);
     return () => window.clearInterval(queueTimer);
-  }, [roomId, sessionActive, currentSong.id]);
+  }, [roomId, sessionActive, currentSong.id, deviceType]);
 
   useEffect(() => {
     const analyser = analyserRef.current;
@@ -437,9 +455,20 @@ function App() {
         }),
       });
       setStatusMessage('Added to queue.');
-      if (!currentSong || currentSong.id === DEFAULT_SONG.id) {
+      const playerIsIdle = !currentSongRef.current.id && !isPlaying;
+      if (playerIsIdle) {
         setCurrentSong(normalized);
-        updatePlayerVideo(normalized.id);
+        setSongPickerText(normalized.title);
+        setIsPlaying(true);
+        setQueue((previous) => previous.filter((item) => item.id !== normalized.id));
+        if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
+          playerRef.current.loadVideoById({ videoId: normalized.id, startSeconds: 0 });
+        }
+        if (normalized.db_id) {
+          await fetchJson(roomUrl(`/api/live-queue/${encodeURIComponent(normalized.db_id)}`, roomId), {
+            method: 'DELETE',
+          });
+        }
       }
     } catch (error) {
       setStatusMessage(error.message || 'Unable to add song to queue.');
@@ -623,9 +652,40 @@ function App() {
             },
           },
           React.createElement('div', { className: 'brand-mark onboarding-mark' }),
-          React.createElement('div', { className: 'eyebrow' }, 'Host console'),
-          React.createElement('h1', null, 'Start a karaoke session'),
-          React.createElement('p', { className: 'panel-subtitle' }, 'Create a room or resume an existing room code to begin hosting.'),
+          !deviceType
+            ? React.createElement(
+                React.Fragment,
+                null,
+                React.createElement('div', { className: 'eyebrow' }, 'Device setup'),
+                React.createElement('h1', null, "How are you using GM's Karaoke today?"),
+                React.createElement('p', { className: 'panel-subtitle' }, 'Choose the experience that fits your screen.'),
+                React.createElement(
+                  'div',
+                  { style: { display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' } },
+                  React.createElement('button', {
+                    className: 'secondary-button',
+                    style: { minHeight: '72px', textAlign: 'left', padding: '16px 20px' },
+                    onClick: () => setDeviceType('laptop'),
+                  }, React.createElement('strong', null, 'Laptop / Computer (Host)'), React.createElement('small', { style: { display: 'block', marginTop: '5px', color: 'var(--muted)' } }, 'Full experience with live scoring.')),
+                  React.createElement('button', {
+                    className: 'secondary-button',
+                    style: { minHeight: '72px', textAlign: 'left', padding: '16px 20px' },
+                    onClick: () => setDeviceType('tv'),
+                  }, React.createElement('strong', null, 'Smart TV (Display Only)'), React.createElement('small', { style: { display: 'block', marginTop: '5px', color: 'var(--muted)' } }, 'Scoring disabled. Best for big screens.')),
+                  React.createElement('button', {
+                    className: 'secondary-button',
+                    style: { minHeight: '72px', textAlign: 'left', padding: '16px 20px' },
+                    onClick: () => { window.location.href = '/mobile'; },
+                  }, React.createElement('strong', null, 'Smartphone (Guest)'), React.createElement('small', { style: { display: 'block', marginTop: '5px', color: 'var(--muted)' } }, 'Join a room to request songs.'))
+                )
+              )
+            : React.createElement(
+                React.Fragment,
+                null,
+                React.createElement('button', { className: 'secondary-button', style: { alignSelf: 'flex-start' }, onClick: () => setDeviceType(null) }, '← Back'),
+                React.createElement('div', { className: 'eyebrow' }, 'Host console'),
+                React.createElement('h1', null, 'Start a karaoke session'),
+                React.createElement('p', { className: 'panel-subtitle' }, 'Create a room or resume an existing room code to begin hosting.'),
           React.createElement(
             'div',
             {
@@ -656,6 +716,7 @@ function App() {
             onClick: resumeSession,
             disabled: !/^[A-Z0-9]{5}$/.test(existingRoomInput.trim().toUpperCase()),
           }, 'Resume session')
+              )
         )
       )
     );
@@ -824,8 +885,8 @@ function App() {
             React.createElement(
               'div',
               { className: 'controls' },
-              React.createElement('button', { className: 'primary-button', onClick: toggleMicrophone }, micActive ? 'Stop mic' : 'Enable mic'),
-              React.createElement('button', { className: `toggle-button ${scoringEnabled ? '' : 'off'}`, onClick: () => setScoringEnabled((value) => !value) }, scoringEnabled ? 'Scoring on' : 'Scoring off'),
+              deviceType !== 'tv' && React.createElement('button', { className: 'primary-button', onClick: toggleMicrophone }, micActive ? 'Stop mic' : 'Enable mic'),
+              deviceType !== 'tv' && React.createElement('button', { className: `toggle-button ${scoringEnabled ? '' : 'off'}`, onClick: () => setScoringEnabled((value) => !value) }, scoringEnabled ? 'Scoring on' : 'Scoring off'),
               React.createElement('button', { className: 'secondary-button', onClick: nextSong }, 'Next song'),
               React.createElement('button', { className: 'secondary-button', onClick: () => setScore(0) }, 'Reset')
             ),
