@@ -1,4 +1,4 @@
-# GM's Karaoke System 🎤
+# GM's Karaoke System 
 
 A modern, multi-tenant Karaoke management application featuring a streaming-app aesthetic, room-based session isolation, and a seamless mobile remote queueing system. 
 
