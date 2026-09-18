@@ -1,8 +1,8 @@
 const { useEffect, useMemo, useRef, useState } = React;
 
 const DEFAULT_SONG = {
-  id: 'BhSZGUXeY6Q',
-  title: 'Karaoke Song',
+  id: '',
+  title: '',
   artist: '',
   rhythm_map: [],
 };
@@ -156,7 +156,7 @@ function App() {
     });
   }
 
-  function advanceAfterCompletion() {
+  async function advanceAfterCompletion() {
     const next = queueRef.current.length > 0 ? normalizeSong(queueRef.current[0]) : null;
     if (next) {
       setCurrentSong(next);
@@ -165,7 +165,18 @@ function App() {
       scoreRef.current = 0;
       setScore(0);
       finishedSongRef.current = null;
-      updatePlayerVideo(next.id);
+      if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
+        playerRef.current.loadVideoById({ videoId: next.id, startSeconds: 0 });
+      }
+      if (next.db_id) {
+        try {
+          await fetchJson(roomUrl(`/api/live-queue/${encodeURIComponent(next.db_id)}`, roomId), {
+            method: 'DELETE',
+          });
+        } catch (error) {
+          setStatusMessage('Next song is playing, but its queue entry could not be cleared.');
+        }
+      }
     } else {
       setStatusMessage('Song saved. Queue is ready for the next singer.');
       setScore(0);
@@ -226,7 +237,7 @@ function App() {
   }
 
   function ensurePlayer() {
-    if (playerRef.current || !window.YT || !window.YT.Player) return;
+    if (!currentSong.id || playerRef.current || !window.YT || !window.YT.Player) return;
 
     const player = new window.YT.Player('yt-player', {
       videoId: currentSong.id,
@@ -294,10 +305,7 @@ function App() {
           ? songsResult.value.map(normalizeSong)
           : [];
         setSongCatalog(normalizedSongs);
-        if (normalizedSongs.length) {
-          setCurrentSong(normalizedSongs[0]);
-          setSongPickerText(normalizedSongs[0].title);
-        }
+        if (!normalizedSongs.length) setStatusMessage('Song catalog is empty.');
       } else {
         setStatusMessage('Song catalog unavailable. Check the song database configuration.');
       }
@@ -624,7 +632,7 @@ function App() {
               className: 'onboarding-room',
               style: { padding: '18px', border: '1px solid var(--border)', borderRadius: '16px' },
             },
-            React.createElement('span', { className: 'eyebrow' }, 'Your room code'),
+            React.createElement('span', { className: 'eyebrow' }, 'Your room code '),
             React.createElement('strong', null, roomId)
           ),
           React.createElement('button', { className: 'secondary-button', onClick: startNewSession }, 'Generate new code'),
@@ -747,7 +755,11 @@ function App() {
             React.createElement(
               'div',
               { className: `player-window ${isSinging ? 'singing' : ''}` },
-              React.createElement('div', { id: 'yt-player', className: 'player-video' }),
+              React.createElement('div', {
+                id: 'yt-player',
+                className: 'player-video',
+                style: currentSong.id ? undefined : { display: 'none' },
+              }),
               !isPlaying && React.createElement('img', {
                 className: 'player-standby',
                 src: '/static/standby.png',
@@ -854,7 +866,7 @@ function App() {
                   textAlign: 'center',
                 },
               },
-              React.createElement('span', { className: 'eyebrow' }, 'Room code'),
+              React.createElement('span', { className: 'eyebrow' }, 'Room code '),
               React.createElement('strong', null, roomId)
             )
           )
