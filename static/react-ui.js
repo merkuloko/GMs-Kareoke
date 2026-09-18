@@ -267,7 +267,12 @@ function App() {
       try {
         const items = await fetchJson(roomUrl('/api/live-queue', roomId));
         if (!Array.isArray(items)) return;
-        setQueue(items.map((item) => normalizeSong({
+        const activeSongId = currentSongRef.current.id;
+        const waitingItems = items.filter((item) => {
+          const itemVideoId = item.youtube_id || item.id;
+          return String(itemVideoId) !== String(activeSongId);
+        });
+        setQueue(waitingItems.map((item) => normalizeSong({
           ...item,
           db_id: item.db_id || item.id,
           requestor: item.singer_name,
@@ -323,7 +328,7 @@ function App() {
     loadInitialData();
     const queueTimer = window.setInterval(loadLiveQueue, 5000);
     return () => window.clearInterval(queueTimer);
-  }, [roomId, sessionActive]);
+  }, [roomId, sessionActive, currentSong.id]);
 
   useEffect(() => {
     const analyser = analyserRef.current;
@@ -600,7 +605,14 @@ function App() {
           'main',
           {
             className: 'onboarding-card card',
-            style: { width: 'min(100%, 520px)', padding: '42px', textAlign: 'center' },
+            style: {
+            width: 'min(100%, 520px)',
+            padding: '42px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '18px',
+            },
           },
           React.createElement('div', { className: 'brand-mark onboarding-mark' }),
           React.createElement('div', { className: 'eyebrow' }, 'Host console'),
@@ -610,16 +622,21 @@ function App() {
             'div',
             {
               className: 'onboarding-room',
-              style: { margin: '28px 0 20px', padding: '18px', border: '1px solid var(--border)', borderRadius: '16px' },
+              style: { padding: '18px', border: '1px solid var(--border)', borderRadius: '16px' },
             },
             React.createElement('span', { className: 'eyebrow' }, 'Your room code'),
             React.createElement('strong', null, roomId)
           ),
-          React.createElement('button', { className: 'primary-button', onClick: startNewSession }, 'Generate new code'),
-          React.createElement('button', { className: 'primary-button onboarding-start', onClick: () => setSessionActive(true) }, 'Start hosting'),
+          React.createElement('button', { className: 'secondary-button', onClick: startNewSession }, 'Generate new code'),
+          React.createElement('button', {
+            className: 'primary-button onboarding-start',
+            style: { width: '100%', minHeight: '48px' },
+            onClick: () => setSessionActive(true),
+          }, 'Start hosting'),
           React.createElement('div', { className: 'onboarding-divider' }, 'or resume a session'),
           React.createElement('input', {
             className: 'search-input',
+            style: { width: '100%', boxSizing: 'border-box' },
             value: existingRoomInput,
             maxLength: 5,
             onChange: (event) => setExistingRoomInput(event.target.value.toUpperCase()),
@@ -823,7 +840,23 @@ function App() {
             { className: 'card qr-card' },
             React.createElement('div', { className: 'panel-title' }, 'Mobile request'),
             qrUrl ? React.createElement('img', { className: 'qr-image', src: qrUrl, alt: 'Mobile queue QR', style: { display: 'block' } }) : React.createElement('div', { className: 'qr-image placeholder' }, 'QR unavailable'),
-            React.createElement('div', { className: 'qr-copy' }, mobileQueueEnabled ? 'Scan to open the mobile queue' : 'Set MOBILE_QUEUE_URL to enable mobile queue')
+            React.createElement('div', { className: 'qr-copy' }, mobileQueueEnabled ? 'Scan to open the mobile queue' : 'Set MOBILE_QUEUE_URL to enable mobile queue'),
+            React.createElement(
+              'div',
+              {
+                className: 'room-code-card',
+                style: {
+                  gridColumn: '1 / -1',
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  background: 'rgba(0, 0, 0, 0.28)',
+                  border: '1px solid rgba(125, 211, 252, 0.24)',
+                  textAlign: 'center',
+                },
+              },
+              React.createElement('span', { className: 'eyebrow' }, 'Room code'),
+              React.createElement('strong', null, roomId)
+            )
           )
         )
       ),
