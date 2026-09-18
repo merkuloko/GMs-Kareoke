@@ -625,6 +625,7 @@ def manage_queue_item(item_id):
 
 
 @app.route("/mobile")
+@app.route("/mobile/<room_id>")
 @app.route("/join/<room_id>")
 def mobile_queue(room_id=None):
     try:
@@ -642,6 +643,48 @@ def mobile_queue(room_id=None):
             path="/",
         )
     return response
+
+
+@app.route("/api/validate-room/<room_id>")
+def validate_room(room_id):
+    try:
+        room_id = require_room_id(room_id)
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+
+    try:
+        if is_supabase_enabled():
+            settings = supabase_request(
+                "GET",
+                "settings",
+                f"select=room_id&room_id=eq.{quote_plus(room_id)}&limit=1",
+            )
+            if settings:
+                return jsonify({"valid": True})
+            queue_rows = supabase_request(
+                "GET",
+                "live_queue",
+                f"select=room_id&room_id=eq.{quote_plus(room_id)}&limit=1",
+            )
+            return jsonify({"valid": bool(queue_rows)})
+
+        conn = get_db_connection()
+        if conn is None:
+            return error_response("Room validation service is not configured", 503)
+        row = conn.execute(
+            """
+            SELECT 1 FROM settings WHERE room_id = ?
+            UNION ALL
+            SELECT 1 FROM live_queue WHERE room_id = ?
+            LIMIT 1
+            """,
+            (room_id, room_id),
+        ).fetchone()
+        conn.close()
+        return jsonify({"valid": row is not None})
+    except (RuntimeError, requests.RequestException, sqlite3.Error) as exc:
+        logger.warning("Room validation failed for %s: %s", room_id, exc)
+        return error_response("Room validation service unavailable", 503)
 
 
 @app.route("/api/config", methods=["POST"])

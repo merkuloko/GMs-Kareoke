@@ -34,6 +34,26 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("valid JSON", response.get_json()["error"])
 
+    def test_validate_room_reports_existing_and_missing_rooms(self):
+        def supabase_response(method, table, query_string):
+            if table == "settings":
+                return [{"room_id": "ABCDE"}] if "ABCDE" in query_string else []
+            return []
+
+        with patch.object(api, "is_supabase_enabled", return_value=True), patch.object(
+            api,
+            "supabase_request",
+            side_effect=supabase_response,
+        ) as mock_request:
+            existing = self.client.get("/api/validate-room/ABCDE")
+            missing = self.client.get("/api/validate-room/ZZZZZ")
+
+        self.assertEqual(existing.status_code, 200)
+        self.assertEqual(existing.get_json(), {"valid": True})
+        self.assertEqual(missing.status_code, 200)
+        self.assertEqual(missing.get_json(), {"valid": False})
+        self.assertEqual(mock_request.call_count, 3)
+
     def test_invalid_queue_request_missing_fields(self):
         response = self.client.post(
             "/api/live-queue",

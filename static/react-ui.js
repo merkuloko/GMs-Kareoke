@@ -25,6 +25,17 @@ function roomUrl(path, roomId) {
   return `${path}${separator}room_id=${encodeURIComponent(roomId)}`;
 }
 
+async function verifyRoomCode(code) {
+  const normalizedCode = String(code || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{5}$/.test(normalizedCode)) return false;
+  const response = await fetch(`/api/validate-room/${encodeURIComponent(normalizedCode)}`, {
+    credentials: 'same-origin',
+  });
+  if (!response.ok) return false;
+  const data = await response.json();
+  return data.valid === true;
+}
+
 function fetchJson(url, options = {}) {
   return fetch(url, { ...options, credentials: options.credentials || 'same-origin' }).then(async (response) => {
     let data = null;
@@ -63,6 +74,7 @@ function App() {
   const [resumeCodeInput, setResumeCodeInput] = useState('');
   const [guestEntry, setGuestEntry] = useState(false);
   const [guestCodeInput, setGuestCodeInput] = useState('');
+  const [roomError, setRoomError] = useState('');
   const [score, setScore] = useState(0);
   const [leaderboard, setLeaderboard] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -652,6 +664,27 @@ function App() {
     setRoomId('');
     setDeviceType(null);
     setResumeCodeInput('');
+    setRoomError('');
+  }
+
+  async function createNewSession() {
+    const newRoomId = generateRoomId();
+    setRoomError('');
+    try {
+      await fetchJson('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_id: newRoomId,
+          settings: {
+            scoring_enabled: true,
+          },
+        }),
+      });
+      enterSession(newRoomId, deviceType);
+    } catch (error) {
+      setRoomError(error.message || 'Unable to create room.');
+    }
   }
 
   if (!sessionActive) {
@@ -728,15 +761,24 @@ function App() {
                     className: 'primary-button onboarding-start',
                     style: { width: '100%', minHeight: '48px' },
                     disabled: !/^[A-Z0-9]{5}$/.test(guestCodeInput.trim().toUpperCase()),
-                    onClick: () => {
+                    onClick: async () => {
                       const normalizedGuestCode = guestCodeInput.trim().toUpperCase();
-                      if (/^[A-Z0-9]{5}$/.test(normalizedGuestCode)) {
-                        window.location.href = '/join/' + guestCodeInput.toUpperCase();
+                      if (!/^[A-Z0-9]{5}$/.test(normalizedGuestCode)) return;
+                      setRoomError('');
+                      try {
+                        if (await verifyRoomCode(normalizedGuestCode)) {
+                          window.location.href = '/mobile/' + guestCodeInput.toUpperCase();
+                        } else {
+                          setRoomError('Room does not exist.');
+                        }
+                      } catch (error) {
+                        setRoomError('Unable to verify room.');
                       }
                     },
                   },
                   'Join Room'
-                )
+                ),
+                roomError && React.createElement('div', { className: 'error-message', role: 'alert' }, roomError)
               )
             : !deviceType
             ? React.createElement(
@@ -775,7 +817,7 @@ function App() {
           React.createElement('button', {
             className: 'primary-button onboarding-start',
             style: { width: '100%', minHeight: '48px' },
-            onClick: () => enterSession(generateRoomId(), deviceType),
+            onClick: createNewSession,
           }, 'Create New Session'),
           React.createElement('div', { className: 'onboarding-divider' }, 'or resume a session'),
           React.createElement('input', {
@@ -789,12 +831,19 @@ function App() {
           }),
           React.createElement('button', {
             className: 'secondary-button',
-            onClick: () => {
+            onClick: async () => {
               const nextRoomId = resumeCodeInput.trim().toUpperCase();
-              if (/^[A-Z0-9]{5}$/.test(nextRoomId)) enterSession(nextRoomId, deviceType);
+              if (!/^[A-Z0-9]{5}$/.test(nextRoomId)) return;
+              setRoomError('');
+              if (await verifyRoomCode(nextRoomId)) {
+                enterSession(nextRoomId, deviceType);
+              } else {
+                setRoomError('Room does not exist.');
+              }
             },
             disabled: !/^[A-Z0-9]{5}$/.test(resumeCodeInput.trim().toUpperCase()),
-          }, 'Resume session')
+          }, 'Resume session'),
+          roomError && React.createElement('div', { className: 'error-message', role: 'alert' }, roomError)
               )
         )
       )

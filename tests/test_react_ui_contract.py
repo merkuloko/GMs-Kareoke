@@ -63,7 +63,7 @@ class ReactUiContractTests(unittest.TestCase):
         self.assertIn("onClick: () => setGuestEntry(true)", UI_SOURCE)
         self.assertIn("Join a Karaoke Room", UI_SOURCE)
         self.assertIn("setGuestEntry(false)", UI_SOURCE)
-        self.assertIn("window.location.href = '/join/' + guestCodeInput.toUpperCase();", UI_SOURCE)
+        self.assertIn("window.location.href = '/mobile/' + guestCodeInput.toUpperCase();", UI_SOURCE)
 
     def test_player_skips_restricted_videos(self):
         self.assertIn("const onPlayerError = (event) => {", UI_SOURCE)
@@ -71,6 +71,16 @@ class ReactUiContractTests(unittest.TestCase):
         self.assertIn("Video restricted by owner. Skipping to next song...", UI_SOURCE)
         self.assertIn("advanceAfterCompletion();", UI_SOURCE)
         self.assertIn("onError: onPlayerError", UI_SOURCE)
+
+    def test_room_entry_validates_before_joining_or_resuming(self):
+        self.assertIn("const [roomError, setRoomError] = useState('');", UI_SOURCE)
+        self.assertIn("async function verifyRoomCode(code)", UI_SOURCE)
+        self.assertIn("/api/validate-room/${encodeURIComponent(normalizedCode)}", UI_SOURCE)
+        self.assertIn("await verifyRoomCode(nextRoomId)", UI_SOURCE)
+        self.assertIn("Room does not exist.", UI_SOURCE)
+        self.assertIn("window.location.href = '/mobile/' + guestCodeInput.toUpperCase();", UI_SOURCE)
+        self.assertIn("method: 'POST'", UI_SOURCE)
+        self.assertIn("room_id: newRoomId", UI_SOURCE)
 
 
 if __name__ == "__main__":
