@@ -17,10 +17,7 @@ function generateRoomId() {
 
 function getStoredRoomId() {
   const existing = window.localStorage.getItem(roomStorageKey);
-  if (existing && /^[A-Z0-9]{5}$/.test(existing)) return existing;
-  const generated = generateRoomId();
-  window.localStorage.setItem(roomStorageKey, generated);
-  return generated;
+  return existing && /^[A-Z0-9]{5}$/.test(existing) ? existing : '';
 }
 
 function roomUrl(path, roomId) {
@@ -60,10 +57,10 @@ function normalizeSong(song) {
 }
 
 function App() {
-  const [roomId, setRoomId] = useState(getStoredRoomId);
-  const [deviceType, setDeviceType] = useState(null);
-  const [sessionActive, setSessionActive] = useState(false);
-  const [existingRoomInput, setExistingRoomInput] = useState('');
+  const [roomId, setRoomId] = useState(() => window.localStorage.getItem(roomStorageKey) || '');
+  const [deviceType, setDeviceType] = useState(() => window.localStorage.getItem('karaoke_device_type') || null);
+  const [sessionActive, setSessionActive] = useState(() => Boolean(window.localStorage.getItem(roomStorageKey)));
+  const [resumeCodeInput, setResumeCodeInput] = useState('');
   const [score, setScore] = useState(0);
   const [leaderboard, setLeaderboard] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -301,11 +298,35 @@ function App() {
           const itemVideoId = item.youtube_id || item.id;
           return String(itemVideoId) !== String(activeSongId);
         });
-        setQueue(waitingItems.map((item) => normalizeSong({
+        const fetchedQueue = waitingItems.map((item) => normalizeSong({
           ...item,
           db_id: item.db_id || item.id,
           requestor: item.singer_name,
-        })));
+        }));
+
+        if (!currentSongRef.current.id && !isPlaying && fetchedQueue.length > 0) {
+          const nextSong = fetchedQueue[0];
+          currentSongRef.current = nextSong;
+          setCurrentSong(nextSong);
+          setSongPickerText(nextSong.title);
+          setQueue(fetchedQueue.slice(1));
+          setIsPlaying(true);
+          if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
+            playerRef.current.loadVideoById({ videoId: nextSong.id, startSeconds: 0 });
+          }
+          if (nextSong.db_id) {
+            try {
+              await fetchJson(roomUrl(`/api/live-queue/${encodeURIComponent(nextSong.db_id)}`, roomId), {
+                method: 'DELETE',
+              });
+            } catch (error) {
+              setStatusMessage('Song started, but the queue could not be synchronized.');
+            }
+          }
+          return;
+        }
+
+        setQueue(fetchedQueue);
       } catch (error) {
         setStatusMessage('Live queue is temporarily unavailable.');
       }
@@ -603,18 +624,23 @@ function App() {
     updatePlayerVideo(nextSong.id);
   }
 
-  function startNewSession() {
-    const nextRoomId = generateRoomId();
-    setRoomId(nextRoomId);
-    window.localStorage.setItem(roomStorageKey, nextRoomId);
+  function enterSession(id, device) {
+    const normalizedRoomId = String(id || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{5}$/.test(normalizedRoomId) || !device) return;
+    window.localStorage.setItem(roomStorageKey, normalizedRoomId);
+    window.localStorage.setItem('karaoke_device_type', device);
+    setRoomId(normalizedRoomId);
+    setDeviceType(device);
+    setSessionActive(true);
   }
 
-  function resumeSession() {
-    const nextRoomId = existingRoomInput.trim().toUpperCase();
-    if (!/^[A-Z0-9]{5}$/.test(nextRoomId)) return;
-    setRoomId(nextRoomId);
-    window.localStorage.setItem(roomStorageKey, nextRoomId);
-    setSessionActive(true);
+  function leaveSession() {
+    window.localStorage.removeItem(roomStorageKey);
+    window.localStorage.removeItem('karaoke_device_type');
+    setSessionActive(false);
+    setRoomId('');
+    setDeviceType(null);
+    setResumeCodeInput('');
   }
 
   if (!sessionActive) {
@@ -686,35 +712,28 @@ function App() {
                 React.createElement('div', { className: 'eyebrow' }, 'Host console'),
                 React.createElement('h1', null, 'Start a karaoke session'),
                 React.createElement('p', { className: 'panel-subtitle' }, 'Create a room or resume an existing room code to begin hosting.'),
-          React.createElement(
-            'div',
-            {
-              className: 'onboarding-room',
-              style: { padding: '18px', border: '1px solid var(--border)', borderRadius: '16px' },
-            },
-            React.createElement('span', { className: 'eyebrow' }, 'Your room code '),
-            React.createElement('strong', null, roomId)
-          ),
-          React.createElement('button', { className: 'secondary-button', onClick: startNewSession }, 'Generate new code'),
           React.createElement('button', {
             className: 'primary-button onboarding-start',
             style: { width: '100%', minHeight: '48px' },
-            onClick: () => setSessionActive(true),
-          }, 'Start hosting'),
+            onClick: () => enterSession(generateRoomId(), deviceType),
+          }, 'Create New Session'),
           React.createElement('div', { className: 'onboarding-divider' }, 'or resume a session'),
           React.createElement('input', {
             className: 'search-input',
             style: { width: '100%', boxSizing: 'border-box' },
-            value: existingRoomInput,
+            value: resumeCodeInput,
             maxLength: 5,
-            onChange: (event) => setExistingRoomInput(event.target.value.toUpperCase()),
+            onChange: (event) => setResumeCodeInput(event.target.value.toUpperCase()),
             placeholder: 'Enter 5-character room code',
             'aria-label': 'Existing room code',
           }),
           React.createElement('button', {
             className: 'secondary-button',
-            onClick: resumeSession,
-            disabled: !/^[A-Z0-9]{5}$/.test(existingRoomInput.trim().toUpperCase()),
+            onClick: () => {
+              const nextRoomId = resumeCodeInput.trim().toUpperCase();
+              if (/^[A-Z0-9]{5}$/.test(nextRoomId)) enterSession(nextRoomId, deviceType);
+            },
+            disabled: !/^[A-Z0-9]{5}$/.test(resumeCodeInput.trim().toUpperCase()),
           }, 'Resume session')
               )
         )
@@ -744,7 +763,12 @@ function App() {
             'div',
             { className: 'session-meta' },
               React.createElement('span', { className: 'live-badge' }, React.createElement('span', { className: 'live-dot' }), 'LIVE'),
-              React.createElement('span', { className: 'room-indicator' }, `Room: ${roomId}`)
+              React.createElement('span', { className: 'room-indicator' }, `Room: ${roomId}`),
+              React.createElement('button', {
+                className: 'small-button',
+                onClick: leaveSession,
+                title: 'Leave this room',
+              }, 'Leave Room')
             ),
           React.createElement('button', { className: 'info-button', onClick: () => setModalOpen(true) }, 'i'),
           React.createElement(
