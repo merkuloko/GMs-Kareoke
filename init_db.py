@@ -71,21 +71,6 @@ def init_db():
 
     cursor.execute("DELETE FROM songs")
 
-    lifetime_map = json.dumps(
-        [
-            {"start": 15.0, "end": 45.0, "label": "Verse 1"},
-            {"start": 60.0, "end": 90.0, "label": "Chorus 1"},
-            {"start": 105.0, "end": 135.0, "label": "Verse 2"},
-            {"start": 150.0, "end": 180.0, "label": "Chorus 2"},
-            {"start": 195.0, "end": 225.0, "label": "Bridge"},
-            {"start": 240.0, "end": 280.0, "label": "Outro"},
-        ]
-    )
-
-    songs_data = [
-        ("LIFETIME - Reimagined", "BEN&BEN", "BhSZGUXeY6Q", lifetime_map),
-    ]
-
     cursor.executemany(
         """
         INSERT INTO songs (title, artist, youtube_id, rhythm_map)
