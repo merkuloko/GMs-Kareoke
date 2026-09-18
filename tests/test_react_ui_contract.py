@@ -25,7 +25,7 @@ class ReactUiContractTests(unittest.TestCase):
     def test_onboarding_requires_device_selection_and_tv_disables_scoring_controls(self):
         self.assertIn("const [deviceType, setDeviceType] = useState(() =>", UI_SOURCE)
         self.assertIn("How are you using GM's Karaoke today?", UI_SOURCE)
-        self.assertIn("window.location.href = '/mobile'", UI_SOURCE)
+        self.assertIn("onClick: () => setGuestEntry(true)", UI_SOURCE)
         self.assertIn("deviceType === 'tv'", UI_SOURCE)
         self.assertIn("deviceType !== 'tv'", UI_SOURCE)
         self.assertIn("if (deviceType !== 'tv' && typeof config.scoring_enabled === 'boolean')", UI_SOURCE)
@@ -56,6 +56,14 @@ class ReactUiContractTests(unittest.TestCase):
         self.assertIn("function leaveSession() {", UI_SOURCE)
         self.assertIn("window.localStorage.removeItem(roomStorageKey);", UI_SOURCE)
         self.assertIn("onClick: leaveSession", UI_SOURCE)
+
+    def test_guest_entry_requires_and_routes_room_code(self):
+        self.assertIn("const [guestEntry, setGuestEntry] = useState(false);", UI_SOURCE)
+        self.assertIn("const [guestCodeInput, setGuestCodeInput] = useState('');", UI_SOURCE)
+        self.assertIn("onClick: () => setGuestEntry(true)", UI_SOURCE)
+        self.assertIn("Join a Karaoke Room", UI_SOURCE)
+        self.assertIn("setGuestEntry(false)", UI_SOURCE)
+        self.assertIn("window.location.href = '/join/' + guestCodeInput.toUpperCase();", UI_SOURCE)
 
 
 if __name__ == "__main__":

@@ -61,6 +61,8 @@ function App() {
   const [deviceType, setDeviceType] = useState(() => window.localStorage.getItem('karaoke_device_type') || null);
   const [sessionActive, setSessionActive] = useState(() => Boolean(window.localStorage.getItem(roomStorageKey)));
   const [resumeCodeInput, setResumeCodeInput] = useState('');
+  const [guestEntry, setGuestEntry] = useState(false);
+  const [guestCodeInput, setGuestCodeInput] = useState('');
   const [score, setScore] = useState(0);
   const [leaderboard, setLeaderboard] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -678,7 +680,56 @@ function App() {
             },
           },
           React.createElement('div', { className: 'brand-mark onboarding-mark' }),
-          !deviceType
+          guestEntry
+            ? React.createElement(
+                React.Fragment,
+                null,
+                React.createElement(
+                  'button',
+                  {
+                    className: 'secondary-button',
+                    style: { alignSelf: 'flex-start' },
+                    onClick: () => {
+                      setGuestEntry(false);
+                      setGuestCodeInput('');
+                    },
+                  },
+                  '← Back'
+                ),
+                React.createElement('div', { className: 'eyebrow' }, 'Guest entry'),
+                React.createElement('h1', null, 'Join a Karaoke Room'),
+                React.createElement(
+                  'p',
+                  { className: 'panel-subtitle' },
+                  'Enter the 5-character Room Code shown on the host screen, or simply scan the QR code with your camera.'
+                ),
+                React.createElement('input', {
+                  className: 'search-input',
+                  style: { width: '100%', boxSizing: 'border-box', textTransform: 'uppercase' },
+                  value: guestCodeInput,
+                  maxLength: 5,
+                  autoCapitalize: 'characters',
+                  onChange: (event) => setGuestCodeInput(event.target.value.toUpperCase()),
+                  placeholder: 'Enter 5-character room code',
+                  'aria-label': 'Guest room code',
+                }),
+                React.createElement(
+                  'button',
+                  {
+                    className: 'primary-button onboarding-start',
+                    style: { width: '100%', minHeight: '48px' },
+                    disabled: !/^[A-Z0-9]{5}$/.test(guestCodeInput.trim().toUpperCase()),
+                    onClick: () => {
+                      const normalizedGuestCode = guestCodeInput.trim().toUpperCase();
+                      if (/^[A-Z0-9]{5}$/.test(normalizedGuestCode)) {
+                        window.location.href = '/join/' + guestCodeInput.toUpperCase();
+                      }
+                    },
+                  },
+                  'Join Room'
+                )
+              )
+            : !deviceType
             ? React.createElement(
                 React.Fragment,
                 null,
@@ -701,7 +752,7 @@ function App() {
                   React.createElement('button', {
                     className: 'secondary-button',
                     style: { minHeight: '72px', textAlign: 'left', padding: '16px 20px' },
-                    onClick: () => { window.location.href = '/mobile'; },
+                    onClick: () => setGuestEntry(true),
                   }, React.createElement('strong', null, 'Smartphone (Guest)'), React.createElement('small', { style: { display: 'block', marginTop: '5px', color: 'var(--muted)' } }, 'Join a room to request songs.'))
                 )
               )
@@ -763,7 +814,6 @@ function App() {
             'div',
             { className: 'session-meta' },
               React.createElement('span', { className: 'live-badge' }, React.createElement('span', { className: 'live-dot' }), 'LIVE'),
-              React.createElement('span', { className: 'room-indicator' }, `Room: ${roomId}`),
               React.createElement('button', {
                 className: 'small-button',
                 onClick: leaveSession,
