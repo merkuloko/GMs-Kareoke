@@ -361,6 +361,29 @@ class ApiEndpointTests(unittest.TestCase):
             {"error": "YouTube API returned an invalid response"},
         )
 
+    def test_youtube_search_requests_embeddable_videos(self):
+        class SearchResponse:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"items": []}
+
+        original = api.YOUTUBE_API
+        api.YOUTUBE_API = "test-key"
+        try:
+            with patch("api.index.requests.get", return_value=SearchResponse()) as youtube_get:
+                response = self.client.get("/api/search?q=test")
+        finally:
+            api.YOUTUBE_API = original
+
+        self.assertEqual(response.status_code, 200)
+        params = youtube_get.call_args.kwargs["params"]
+        self.assertEqual(params["type"], "video")
+        self.assertEqual(params["videoEmbeddable"], "true")
+
     def test_malformed_song_rows_are_normalized(self):
         with patch.object(
             api,

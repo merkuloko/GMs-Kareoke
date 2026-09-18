@@ -273,6 +273,7 @@ function App() {
             openSongFinished();
           }
         },
+        onError: onPlayerError,
       },
     });
 
@@ -616,6 +617,14 @@ function App() {
       playerRef.current.playVideo();
     }
   }
+
+  const onPlayerError = (event) => {
+    if (![101, 150, 15, 100].includes(event.data)) return;
+    const message = 'Video restricted by owner. Skipping to next song...';
+    console.warn(message, event.data);
+    setStatusMessage(message);
+    advanceAfterCompletion();
+  };
 
   function setSongByText(event) {
     const selected = event.target.value;

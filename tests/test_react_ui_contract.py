@@ -65,6 +65,13 @@ class ReactUiContractTests(unittest.TestCase):
         self.assertIn("setGuestEntry(false)", UI_SOURCE)
         self.assertIn("window.location.href = '/join/' + guestCodeInput.toUpperCase();", UI_SOURCE)
 
+    def test_player_skips_restricted_videos(self):
+        self.assertIn("const onPlayerError = (event) => {", UI_SOURCE)
+        self.assertIn("[101, 150, 15, 100].includes(event.data)", UI_SOURCE)
+        self.assertIn("Video restricted by owner. Skipping to next song...", UI_SOURCE)
+        self.assertIn("advanceAfterCompletion();", UI_SOURCE)
+        self.assertIn("onError: onPlayerError", UI_SOURCE)
+
 
 if __name__ == "__main__":
     unittest.main()

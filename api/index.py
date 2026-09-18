@@ -842,6 +842,7 @@ def search_youtube():
         "part": "snippet",
         "q": f"{query} karaoke",
         "type": "video",
+        "videoEmbeddable": "true",
         "maxResults": 5,
         "key": YOUTUBE_API,
     }
