@@ -33,6 +33,10 @@ class ReactUiContractTests(unittest.TestCase):
     def test_empty_song_does_not_create_youtube_video(self):
         self.assertIn("style: currentSong.id ? undefined : { display: 'none' }", UI_SOURCE)
 
+    def test_tv_hides_search_panel_and_expands_queue_layout(self):
+        self.assertIn("deviceType !== 'tv' && React.createElement(", UI_SOURCE)
+        self.assertIn("deviceType === 'tv' ? 'search-and-queue tv-queue-only' : 'search-and-queue'", UI_SOURCE)
+
 
 if __name__ == "__main__":
     unittest.main()

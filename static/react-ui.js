@@ -935,8 +935,8 @@ function App() {
       ),
       React.createElement(
         'div',
-        { className: 'search-and-queue' },
-        React.createElement(
+        { className: deviceType === 'tv' ? 'search-and-queue tv-queue-only' : 'search-and-queue' },
+        deviceType !== 'tv' && React.createElement(
           'div',
           { className: 'card panel-block' },
           React.createElement(

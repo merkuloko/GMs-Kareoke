@@ -519,6 +519,10 @@ button:hover {
   margin-top: 22px;
 }
 
+.search-and-queue.tv-queue-only {
+  grid-template-columns: 1fr;
+}
+
 .search-row {
   display: flex;
   gap: 10px;
